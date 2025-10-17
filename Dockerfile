@@ -81,10 +81,10 @@ EXPOSE 5173 3000 8080
 # Create development script
 RUN echo '#!/bin/bash\n\
 set -e\n\
-echo "🚀 Starting Web x86 Emulator Development Environment"\n\
-echo "📦 Building WASM module..."\n\
+echo "Starting Web x86 Emulator Development Environment"\n\
+echo "Building WASM module..."\n\
 cd core && wasm-pack build --target web --out-dir ../frontend/src/wasm/pkg\n\
-echo "🌐 Starting frontend development server..."\n\
+echo "Starting frontend development server..."\n\
 cd ../frontend && npm run dev\n\
 ' > /app/dev.sh && chmod +x /app/dev.sh
 

@@ -28,49 +28,49 @@ show_help() {
 }
 
 start_dev() {
-    echo -e "\033[32m🚀 Starting Web x86 Emulator Development Environment...\033[0m"
+    echo -e "\033[32m Starting Web x86 Emulator Development Environment...\033[0m"
     docker-compose up --build web-x86-dev
 }
 
 stop_dev() {
-    echo -e "\033[33m🛑 Stopping development environment...\033[0m"
+    echo -e "\033[33m Stopping development environment...\033[0m"
     docker-compose down
 }
 
 restart_dev() {
-    echo -e "\033[33m🔄 Restarting development environment...\033[0m"
+    echo -e "\033[33m Restarting development environment...\033[0m"
     docker-compose restart web-x86-dev
 }
 
 build_images() {
-    echo -e "\033[34m🔨 Building Docker images...\033[0m"
+    echo -e "\033[34m Building Docker images...\033[0m"
     docker-compose build
 }
 
 show_logs() {
-    echo -e "\033[36m📋 Showing logs from development container...\033[0m"
+    echo -e "\033[36m Showing logs from development container...\033[0m"
     docker-compose logs -f web-x86-dev
 }
 
 open_shell() {
-    echo -e "\033[35m🐚 Opening shell in development container...\033[0m"
+    echo -e "\033[35m Opening shell in development container...\033[0m"
     docker-compose exec web-x86-dev /bin/bash
 }
 
 clean_env() {
-    echo -e "\033[31m🧹 Cleaning up Docker environment...\033[0m"
+    echo -e "\033[31m Cleaning up Docker environment...\033[0m"
     docker-compose down -v
     docker system prune -f
-    echo -e "\033[32m✅ Cleanup complete!\033[0m"
+    echo -e "\033[32m Cleanup complete!\033[0m"
 }
 
 start_prod() {
-    echo -e "\033[32m🏭 Starting production build...\033[0m"
+    echo -e "\033[32m Starting production build...\033[0m"
     docker-compose --profile production up --build web-x86-prod
 }
 
 start_tools() {
-    echo -e "\033[34m🛠️ Starting development tools container...\033[0m"
+    echo -e "\033[34m Starting development tools container...\033[0m"
     docker-compose --profile tools up -d dev-tools
     docker-compose exec dev-tools /bin/bash
 }
@@ -108,7 +108,7 @@ case $COMMAND in
         show_help
         ;;
     *)
-        echo -e "\033[31m❌ Unknown command: $COMMAND\033[0m"
+        echo -e "\033[31m Unknown command: $COMMAND\033[0m"
         show_help
         exit 1
         ;;

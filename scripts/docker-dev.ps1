@@ -61,7 +61,7 @@ function Clean-Environment {
     Write-Host "Cleaning up Docker environment..." -ForegroundColor Red
     docker-compose down -v
     docker system prune -f
-    Write-Host "✅ Cleanup complete!" -ForegroundColor Green
+    Write-Host " Cleanup complete!" -ForegroundColor Green
 }
 
 function Start-Production {
@@ -88,7 +88,7 @@ switch ($Command.ToLower()) {
     "tools" { Start-Tools }
     "help" { Show-Help }
     default { 
-        Write-Host "❌ Unknown command: $Command" -ForegroundColor Red
+        Write-Host " Unknown command: $Command" -ForegroundColor Red
         Show-Help 
     }
 }
