@@ -6,5 +6,13 @@ Educational 32-bit x86 subset emulator for the web: registers, stack, calling co
 ```bash
 # requires: Node 18+, Rust + wasm-pack, pnpm (or npm/yarn)
 pnpm i
+# build all workspace packages
 pnpm -w build
-pnpm -w devcar
+# start the frontend dev server (pnpm workspace)
+pnpm -w --filter frontend dev
+
+# If you don't use pnpm, from the `frontend` folder you can use npm/yarn:
+cd frontend
+npm install
+npm run dev
+```
