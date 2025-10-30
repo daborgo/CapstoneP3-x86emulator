@@ -3,6 +3,19 @@
 Educational 32-bit x86 subset emulator for the web: registers, stack, calling conventions, debugger, visualizations, and sandboxed virtual I/O.
 
 ## Quick Start
+
+### Option 1: Docker (Recommended)
+```bash
+# Validate Docker setup
+./scripts/validate-docker.sh
+
+# Start development environment
+./scripts/docker-dev.sh start
+
+# Access the application at http://localhost:5173
+```
+
+### Option 2: Local Development
 ```bash
 # requires: Node 18+, Rust + wasm-pack, pnpm (or npm/yarn)
 pnpm i
@@ -16,3 +29,12 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## Development Environment
+
+This project supports both Docker and local development:
+
+- **Docker**: Reproducible environment with Node.js 20 + Rust 1.90 + wasm-pack
+- **Local**: Requires Node.js 18+, Rust, and wasm-pack installed locally
+
+See [DOCKER.md](DOCKER.md) for detailed Docker setup instructions.

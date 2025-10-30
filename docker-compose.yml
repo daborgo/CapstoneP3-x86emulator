@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # Main development environment
+  web-x86-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: web-x86-emulator-dev
+    ports:
+      - "5173:5173"  # Vite dev server
+      - "3000:3000"  # Production server
+    volumes:
+      # Mount source code for hot reload
+      - ./frontend:/app/frontend
+      - ./core:/app/core
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
+      # Exclude node_modules and target directories for better performance
+      - /app/frontend/node_modules
+      - /app/core/target
+    environment:
+      - NODE_ENV=development
+      - RUST_LOG=debug
+      - CARGO_TARGET_DIR=/app/core/target
+    working_dir: /app
+    command: /app/dev.sh
+    stdin_open: true
+    tty: true
+    networks:
+      - web-x86-network
+
+  # Production build service
+  web-x86-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: web-x86-emulator-prod
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - web-x86-network
+    profiles:
+      - production
+
+  # Development database (if needed for future features)
+  postgres:
+    image: postgres:15-alpine
+    container_name: web-x86-postgres
+    environment:
+      - POSTGRES_DB=web_x86_emulator
+      - POSTGRES_USER=dev
+      - POSTGRES_PASSWORD=dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - web-x86-network
+    profiles:
+      - database
+
+  # Redis for caching (if needed)
+  redis:
+    image: redis:7-alpine
+    container_name: web-x86-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - web-x86-network
+    profiles:
+      - cache
+
+  # Development tools container
+  dev-tools:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: web-x86-dev-tools
+    volumes:
+      - ./:/app
+      - /app/frontend/node_modules
+      - /app/core/target
+    working_dir: /app
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+    networks:
+      - web-x86-network
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  web-x86-network:
+    driver: bridge
