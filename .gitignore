@@ -98,6 +98,26 @@ dist
 # public
 
 # vuepress build output
+
+# Rust build artifacts
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+*.exe
+*.dll
+*.dll.exp
+*.rmeta
+*.d
+
+# Rust-specific build directories
+debug/
+release/
+
+# WASM build artifacts
+*.wasm
+*.js.map
+*.wasm.map
 .vuepress/dist
 
 # vuepress v2.x temp and cache directory
@@ -134,3 +154,11 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# WASM build output
+/frontend/src/wasm/pkg/
