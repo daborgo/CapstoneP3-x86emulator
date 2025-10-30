@@ -98,6 +98,26 @@ dist
 # public
 
 # vuepress build output
+
+# Rust build artifacts
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+*.exe
+*.dll
+*.dll.exp
+*.rmeta
+*.d
+
+# Rust-specific build directories
+debug/
+release/
+
+# WASM build artifacts
+*.wasm
+*.js.map
+*.wasm.map
 .vuepress/dist
 
 # vuepress v2.x temp and cache directory
