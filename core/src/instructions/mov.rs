@@ -3,6 +3,7 @@
 
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 use std::fmt
 
 use crate::cpu::{CPU, Operand};
@@ -11,6 +12,8 @@ use crate::decoder::{Instruction, Operand}
 
 pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) {
 =======
+=======
+>>>>>>> Stashed changes
 use std::fmt;
 
 use crate::cpu::{CPU, Operand};
@@ -42,6 +45,9 @@ impl From<crate::memory::MemoryError> for ExecutionError {
 
 
 pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) -> Result<(), ExecutionError> {
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
     // MOV requires both a source and destination operand
     let src_operand = instruction.src.ok_or(ExecutionError::InvalidOperand)?;
@@ -67,12 +73,18 @@ pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) -> Result<(), Executi
         }
     }
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 }
 
 #{cfg(test)}
 mod tests {
     use super::*;
     use crate::decoder::{Instruction, Opcode}
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 }
