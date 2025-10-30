@@ -1,21 +1,6 @@
 // MOV Instruction implementation
 // This module implements the MOV instruction which copies data from a source operand to a destination operand
-
-
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-use std::fmt
-
-use crate::cpu::{CPU, Operand};
-use crate::memory::Memoryuse 
-use crate::decoder::{Instruction, Operand}
-
-pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) {
-=======
-=======
->>>>>>> Stashed changes
 use std::fmt;
-
 use crate::cpu::{CPU, Operand};
 use crate::memory::Memoryuse;
 use crate::decoder::{Instruction, Operand};
@@ -45,10 +30,6 @@ impl From<crate::memory::MemoryError> for ExecutionError {
 
 
 pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) -> Result<(), ExecutionError> {
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
     // MOV requires both a source and destination operand
     let src_operand = instruction.src.ok_or(ExecutionError::InvalidOperand)?;
     let dest_operand = instruction.dest.ok_or(ExecutionError::InvalidOperand)?;
@@ -72,19 +53,10 @@ pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) -> Result<(), Executi
             return Err(ExecutionError::InvalidOperand);
         }
     }
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-=======
-=======
->>>>>>> Stashed changes
 }
 
 #{cfg(test)}
 mod tests {
     use super::*;
     use crate::decoder::{Instruction, Opcode}
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
 }
