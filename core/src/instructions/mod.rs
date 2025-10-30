@@ -6,6 +6,7 @@
 use std::fmt;
 
 pub mod push;
+pub mod call;
 
 use crate::cpu::CPU;
 use crate::memory::Memory;
@@ -88,6 +89,10 @@ pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) ->
             push::execute(cpu, memory, instruction)?;
             Ok(())
         },
+        Opcode::CALL => {
+    call::execute(cpu, memory, instruction)?;
+    Ok(())
+    },
         
         // Add more instructions here as we implement them
         // Opcode::ADD => add::execute(cpu, memory, instruction)?,

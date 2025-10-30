@@ -44,12 +44,14 @@ impl std::error::Error for DecodeError {}
 pub enum Opcode {
     /// PUSH instruction - push register onto stack
     PUSH,
+    CALL,
 }
 
 impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Opcode::PUSH => write!(f, "PUSH"),
+            Opcode::CALL => write!(f, "CALL"),
         }
     }
 }
@@ -134,6 +136,7 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0x55 => Ok(Opcode::PUSH),  // PUSH EBP
         0x56 => Ok(Opcode::PUSH),  // PUSH ESI
         0x57 => Ok(Opcode::PUSH),  // PUSH EDI
+        0xE8 => Ok(Opcode::CALL),
         
         _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
     }
@@ -209,6 +212,18 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 length: 1,
             })
         },
+        Opcode::CALL => {
+    if bytes.len() < 5 {
+        return Err(DecodeError::InsufficientBytes);
+    }
+    let disp = u32::from_le_bytes(bytes[1..5].try_into().unwrap());
+    Ok(Instruction {
+        opcode,
+        dest: None,
+        src: Some(Operand::Immediate(disp)),
+        length: 5,
+    })
+},
     }
 }
 
