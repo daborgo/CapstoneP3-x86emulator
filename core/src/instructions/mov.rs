@@ -2,6 +2,7 @@
 // This module implements the MOV instruction which copies data from a source operand to a destination operand
 
 
+<<<<<<< Updated upstream
 use std::fmt
 
 use crate::cpu::{CPU, Operand};
@@ -9,6 +10,39 @@ use crate::memory::Memoryuse
 use crate::decoder::{Instruction, Operand}
 
 pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) {
+=======
+use std::fmt;
+
+use crate::cpu::{CPU, Operand};
+use crate::memory::Memoryuse;
+use crate::decoder::{Instruction, Operand};
+
+pub enum ExecutionError {
+    InvalidOperand,
+
+    MemoryError(crate::memoery::MemoryError),
+}
+
+impl fmt::Display for ExecutionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExecutionError::InvalidOperand => write!(f, "Invalid operand for MOV instruction"),
+            ExecutionError::MemoryError(err) => write!(f, "Memory error: {}", err),
+        }
+    }
+}
+
+impl std::error::Error for ExecutionError {}
+
+impl From<crate::memory::MemoryError> for ExecutionError {
+    fn from(err: crate::memory::MemoryError) -> Self {
+        ExecutionError::MemoryError(err)
+    }
+}
+
+
+pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) -> Result<(), ExecutionError> {
+>>>>>>> Stashed changes
     // MOV requires both a source and destination operand
     let src_operand = instruction.src.ok_or(ExecutionError::InvalidOperand)?;
     let dest_operand = instruction.dest.ok_or(ExecutionError::InvalidOperand)?;
@@ -32,4 +66,13 @@ pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) {
             return Err(ExecutionError::InvalidOperand);
         }
     }
+<<<<<<< Updated upstream
+=======
+}
+
+#{cfg(test)}
+mod tests {
+    use super::*;
+    use crate::decoder::{Instruction, Opcode}
+>>>>>>> Stashed changes
 }
