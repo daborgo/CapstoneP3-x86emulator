@@ -1,22 +1,35 @@
-use crate::cpu::{CPU, Operand};
+// MOV Instruction implementation
+// This module implements the MOV instruction which copies data from a source operand to a destination operand
 
-pub fn mov(cpu: &mut CPU, dest: Operand, src: Operand) {
-    let value = match src {
-        Operand::Reg(r) => cpu.regs[r],
-        Operand::Imm(imm) => imm,
-        Operand::Mem(addr) => {
-            // Load little-endian 32-bit value from memory
-            let bytes = &cpu.memory[addr as usize..addr as usize + 4];
-            u32::from_le_bytes(bytes.try_into().unwrap())
-        }
+
+use std::fmt
+
+use crate::cpu::{CPU, Operand};
+use crate::memory::Memoryuse 
+use crate::decoder::{Instruction, Operand}
+
+pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) {
+    // MOV requires both a source and destination operand
+    let src_operand = instruction.src.ok_or(ExecutionError::InvalidOperand)?;
+    let dest_operand = instruction.dest.ok_or(ExecutionError::InvalidOperand)?;
+
+    // Retrieve the value from the source operand
+    let value = match src_operand {
+        Operand::Register(reg_name) => cpu.registers.get(reg_name),
+        Operand::Immediate(val) => val,
+        Operand::Memory(addr) => memory.read_u32(addr)?,
     };
 
-    match dest {
-        Operand::Reg(r) => cpu.regs[r] = value,
-        Operand::Mem(addr) => {
-            let bytes = value.to_le_bytes();
-            cpu.memory[addr as usize..addr as usize + 4].copy_from_slice(&bytes);
+   match dest_operand {
+        Operand::Register(reg_name) => {
+            cpu.registers.set(reg_name, value);
         }
-        Operand::Imm(_) => panic!("Cannot move into an immediate value!"),
+        Operand::Memory(addr) => {
+            memory.write_u32(addr, value)?;
+        }
+        Operand::Immediate(_) => {
+            // Cannot write into an immediate value
+            return Err(ExecutionError::InvalidOperand);
+        }
     }
 }
