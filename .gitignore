@@ -154,3 +154,11 @@ release/
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# WASM build output
+/frontend/src/wasm/pkg/
