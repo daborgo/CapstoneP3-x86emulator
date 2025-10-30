@@ -14,8 +14,15 @@ pub enum ExecutionError {
 impl fmt::Display for ExecutionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExecutionError::InvalidOperand => write!(f, "Invalid operand for MOV instruction"),
-            ExecutionError::MemoryError(err) => write!(f, "Memory error: {}", err),
+            ExecutionError::InvalidOperand => {
+                write!(f, "Invalid operand for instruction")
+            },
+            ExecutionError::MemoryError(err) => {
+                write!(f, "Memory error: {}", err)
+            },
+            ExecutionError::StackOverflow => {
+                write!(f, "Stack overflow")
+            },
         }
     }
 }
@@ -59,4 +66,25 @@ pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) -> Result<(), Executi
 mod tests {
     use super::*;
     use crate::decoder::{Instruction, Opcode}
+
+    #[test]
+    fn mov_reg_to_reg() {
+        let mut cpu = CPU::new();
+        let mut mem = Memory::new(0x1000000);
+
+        cpu.registers.eax = 0x12345678;
+        cpu.registers.ebx = 0;
+        cpu.registers.eip = 0x1000;
+
+        let ins = Instruction {
+            opcode: Opcode::MOV,
+            dest: Some(Operand::Register(RegisterName::EBX)),
+            src:  Some(Operand::Register(RegisterName::EAX)),
+            length: 1,
+        };
+
+        execute(&mut cpu, &mut mem, &ins).unwrap();
+        assert_eq!(cpu.registers.ebx, 0x12345678);
+        assert_eq!(cpu.registers.eip, 0x1001);
+    }
 }
