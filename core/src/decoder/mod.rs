@@ -44,12 +44,15 @@ impl std::error::Error for DecodeError {}
 pub enum Opcode {
     /// PUSH instruction - push register onto stack
     PUSH,
+    /// SUB instruction - subtract source from destination
+    SUB,
 }
 
 impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Opcode::PUSH => write!(f, "PUSH"),
+            Opcode::SUB => write!(f, "SUB"),
         }
     }
 }
@@ -135,6 +138,17 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0x56 => Ok(Opcode::PUSH),  // PUSH ESI
         0x57 => Ok(Opcode::PUSH),  // PUSH EDI
         
+        // SUB instructions
+        0x28 => Ok(Opcode::SUB),  // SUB r/m8, r8
+        0x29 => Ok(Opcode::SUB),  // SUB r/m32, r32
+        0x2A => Ok(Opcode::SUB),  // SUB r8, r/m8
+        0x2B => Ok(Opcode::SUB),  // SUB r32, r/m32
+        0x2C => Ok(Opcode::SUB),  // SUB AL, imm8
+        0x2D => Ok(Opcode::SUB),  // SUB EAX, imm32
+        0x80 => Ok(Opcode::SUB),  // SUB r/m8, imm8 (when reg field of ModRM = /5)
+        0x81 => Ok(Opcode::SUB),  // SUB r/m32, imm32 (when reg field of ModRM = /5)
+        0x83 => Ok(Opcode::SUB),  // SUB r/m32, imm8 (when reg field of ModRM = /5)
+        
         _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
     }
 }
@@ -209,6 +223,46 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 length: 1,
             })
         },
+        Opcode::SUB => {
+            // For now, we'll implement a simple case: SUB between registers
+            // This will need to be expanded based on the ModR/M byte and other forms
+            if bytes.len() < 2 {
+                return Err(DecodeError::InsufficientBytes);
+            }
+            
+            // For this example, we'll assume it's a register-to-register SUB
+            // In a full implementation, you'd need to parse the ModR/M byte properly
+            let dest_reg = match bytes[1] >> 3 & 0x7 {
+                0 => crate::cpu::RegisterName::EAX,
+                1 => crate::cpu::RegisterName::ECX,
+                2 => crate::cpu::RegisterName::EDX,
+                3 => crate::cpu::RegisterName::EBX,
+                4 => crate::cpu::RegisterName::ESP,
+                5 => crate::cpu::RegisterName::EBP,
+                6 => crate::cpu::RegisterName::ESI,
+                7 => crate::cpu::RegisterName::EDI,
+                _ => unreachable!(),
+            };
+
+            let src_reg = match bytes[1] & 0x7 {
+                0 => crate::cpu::RegisterName::EAX,
+                1 => crate::cpu::RegisterName::ECX,
+                2 => crate::cpu::RegisterName::EDX,
+                3 => crate::cpu::RegisterName::EBX,
+                4 => crate::cpu::RegisterName::ESP,
+                5 => crate::cpu::RegisterName::EBP,
+                6 => crate::cpu::RegisterName::ESI,
+                7 => crate::cpu::RegisterName::EDI,
+                _ => unreachable!(),
+            };
+            
+            Ok(Instruction {
+                opcode,
+                dest: Some(Operand::Register(dest_reg)),
+                src: Some(Operand::Register(src_reg)),
+                length: 2,  // opcode byte + ModR/M byte
+            })
+        },
     }
 }
 
@@ -278,6 +332,18 @@ mod tests {
         assert!(formatted.contains("PUSH"));
         assert!(formatted.contains("EAX"));
         assert!(formatted.contains("1 bytes"));
+    }
+
+    #[test]
+    fn test_decode_sub_register() {
+        // Example: SUB EAX, EBX (register-to-register form)
+        let bytes = [0x2B, 0xC3];  // 0x2B is SUB r32,r/m32, 0xC3 is ModR/M byte for EAX,EBX
+        let instruction = decode(&bytes).unwrap();
+        
+        assert_eq!(instruction.opcode, Opcode::SUB);
+        assert_eq!(instruction.dest, Some(Operand::Register(RegisterName::EAX)));
+        assert_eq!(instruction.src, Some(Operand::Register(RegisterName::EBX)));
+        assert_eq!(instruction.length, 2);
     }
 }
 
