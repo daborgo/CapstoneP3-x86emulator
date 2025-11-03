@@ -7,6 +7,7 @@ use std::fmt;
 
 pub mod push;
 pub mod sub;
+pub mod add;
 
 use crate::cpu::CPU;
 use crate::memory::Memory;
