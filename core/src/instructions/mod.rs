@@ -6,6 +6,7 @@
 use std::fmt;
 
 pub mod push;
+pub mod sub;
 pub mod add;
 
 use crate::cpu::CPU;
@@ -40,6 +41,12 @@ impl std::error::Error for InstructionError {}
 impl From<push::ExecutionError> for InstructionError {
     fn from(err: push::ExecutionError) -> Self {
         InstructionError::ExecutionError(err)
+    }
+}
+
+impl From<sub::ExecutionError> for InstructionError {
+    fn from(_err: sub::ExecutionError) -> Self {
+        InstructionError::ExecutionError(push::ExecutionError::InvalidOperand) // TODO: Map sub errors properly
     }
 }
 
@@ -89,7 +96,10 @@ pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) ->
             push::execute(cpu, memory, instruction)?;
             Ok(())
         },
-        
+        Opcode::SUB => {
+            sub::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
         // Add more instructions here as we implement them
         // Opcode::ADD => add::execute(cpu, memory, instruction)?,
         // Opcode::MOV => mov::execute(cpu, memory, instruction)?,
