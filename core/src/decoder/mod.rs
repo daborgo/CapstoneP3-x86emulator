@@ -46,6 +46,8 @@ pub enum Opcode {
     PUSH,
     /// SUB instruction - subtract source from destination
     SUB,
+    /// JMP instruction - jump to target location
+    JMP,
 }
 
 impl fmt::Display for Opcode {
@@ -53,6 +55,7 @@ impl fmt::Display for Opcode {
         match self {
             Opcode::PUSH => write!(f, "PUSH"),
             Opcode::SUB => write!(f, "SUB"),
+            Opcode::JMP => write!(f, "JMP"),
         }
     }
 }
@@ -137,6 +140,11 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0x55 => Ok(Opcode::PUSH),  // PUSH EBP
         0x56 => Ok(Opcode::PUSH),  // PUSH ESI
         0x57 => Ok(Opcode::PUSH),  // PUSH EDI
+        
+        // JMP instructions
+        0xEB => Ok(Opcode::JMP),  // Short JMP rel8
+        0xE9 => Ok(Opcode::JMP),  // Near JMP rel32
+        0xFF => Ok(Opcode::JMP),  // Indirect JMP r/m32
         
         // SUB instructions
         0x28 => Ok(Opcode::SUB),  // SUB r/m8, r8
@@ -223,6 +231,39 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 length: 1,
             })
         },
+        Opcode::JMP => {
+            match opcode_byte {
+                0xEB => {
+                    // Short JMP (8-bit displacement)
+                    if bytes.len() < 2 {
+                        return Err(DecodeError::InsufficientBytes);
+                    }
+                    Ok(Instruction {
+                        opcode,
+                        dest: Some(Operand::Immediate((bytes[1] as i8) as i32 as u32)),
+                        src: None,
+                        length: 2,
+                    })
+                },
+                0xE9 => {
+                    // Near JMP (32-bit displacement)
+                    if bytes.len() < 5 {
+                        return Err(DecodeError::InsufficientBytes);
+                    }
+                    let displacement = ((bytes[4] as u32) << 24) |
+                                     ((bytes[3] as u32) << 16) |
+                                     ((bytes[2] as u32) << 8) |
+                                     (bytes[1] as u32);
+                    Ok(Instruction {
+                        opcode,
+                        dest: Some(Operand::Immediate(displacement)),
+                        src: None,
+                        length: 5,
+                    })
+                },
+                _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
+            }
+        },
         Opcode::SUB => {
             // For now, we'll implement a simple case: SUB between registers
             // This will need to be expanded based on the ModR/M byte and other forms
@@ -281,7 +322,7 @@ mod tests {
     #[test]
     fn test_parse_opcode_unknown() {
         assert!(parse_opcode(0x00).is_err());
-        assert!(parse_opcode(0xFF).is_err());
+        assert!(parse_opcode(0x10).is_err());  // Use a different invalid opcode
     }
     
     #[test]
