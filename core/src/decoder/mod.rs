@@ -44,12 +44,14 @@ impl std::error::Error for DecodeError {}
 pub enum Opcode {
     /// PUSH instruction - push register onto stack
     PUSH,
+    MOV,
 }
 
 impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Opcode::PUSH => write!(f, "PUSH"),
+            Opcode::MOV  => write!(f, "MOV"),
         }
     }
 }
@@ -134,6 +136,16 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0x55 => Ok(Opcode::PUSH),  // PUSH EBP
         0x56 => Ok(Opcode::PUSH),  // PUSH ESI
         0x57 => Ok(Opcode::PUSH),  // PUSH EDI
+
+        0xB8 => Ok(Opcode::MOV), // MOV EAX
+        0xB9 => Ok(Opcode::MOV), // MOV ECX
+        0xBA => Ok(Opcode::MOV), // MOV EDX
+        0xBB => Ok(Opcode::MOV), // MOV EBX
+        0xBC => Ok(Opcode::MOV), // MOV ESP
+        0xBD => Ok(Opcode::MOV), // MOV EBP
+        0xBE => Ok(Opcode::MOV), // MOV ESI
+        0xBF => Ok(Opcode::MOV), // MOV EDI
+
         
         _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
     }
@@ -160,10 +172,28 @@ pub fn get_push_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, De
         0x55 => Ok(crate::cpu::RegisterName::EBP),
         0x56 => Ok(crate::cpu::RegisterName::ESI),
         0x57 => Ok(crate::cpu::RegisterName::EDI),
-        
+    
+
         _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
     }
 }
+
+fn mov_imm_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, DecodeError> {
+    match opcode_byte {
+        0xB8 => Ok(crate::cpu::RegisterName::EAX),
+        0xB9 => Ok(crate::cpu::RegisterName::ECX),
+        0xBA => Ok(crate::cpu::RegisterName::EDX),
+        0xBB => Ok(crate::cpu::RegisterName::EBX),
+        0xBC => Ok(crate::cpu::RegisterName::ESP),
+        0xBD => Ok(crate::cpu::RegisterName::EBP),
+        0xBE => Ok(crate::cpu::RegisterName::ESI),
+        0xBF => Ok(crate::cpu::RegisterName::EDI),
+
+        _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
+    }
+}
+
+
 
 /// Decode instruction bytes into a structured Instruction
 /// 
@@ -209,6 +239,27 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 length: 1,
             })
         },
+        
+         Opcode::MOV => {
+            // Handle MOV imm32 -> reg (opcodes 0xB8 .. 0xBF)
+            // Instruction layout: opcode (1 byte) + imm32 (4 bytes)
+            if bytes.len() < 5 {
+                return Err(DecodeError::InsufficientBytes);
+            }
+
+            let dest_reg = mov_imm_register(opcode_byte)?;
+
+            // Little-endian immediate u32 from bytes[1..5]
+            let imm = u32::from_le_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
+
+            Ok(Instruction {
+                opcode,
+                dest: Some(Operand::Register(dest_reg)),
+                src: Some(Operand::Immediate(imm)),
+                length: 5,
+            })
+
+        }
     }
 }
 
@@ -279,5 +330,18 @@ mod tests {
         assert!(formatted.contains("EAX"));
         assert!(formatted.contains("1 bytes"));
     }
+
+    #[test]
+    fn test_decode_mov_imm_to_eax() {
+        // MOV EAX, 0xDEADBEEF -> opcode 0xB8 followed by imm32 little-endian
+        let bytes = [0xB8, 0xEF, 0xBE, 0xAD, 0xDE];
+        let instruction = decode(&bytes).unwrap();
+
+        assert_eq!(instruction.opcode, Opcode::MOV);
+        assert_eq!(instruction.dest, Some(Operand::Register(RegisterName::EAX)));
+        assert_eq!(instruction.src, Some(Operand::Immediate(0xDEADBEEF)));
+        assert_eq!(instruction.length, 5);
+    }
+
 }
 
