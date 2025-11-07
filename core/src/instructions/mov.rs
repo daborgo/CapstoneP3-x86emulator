@@ -48,6 +48,7 @@ pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) -> Result<(), Executi
         Operand::Memory(addr) => memory.read_u32(addr)?,
     };
 
+    // Write value to the destination operand
    match dest_operand {
         Operand::Register(reg_name) => {
             cpu.registers.set(reg_name, value);
@@ -62,7 +63,7 @@ pub fn execute(cpu: &mut CPU, dest: Operand, src: Operand) -> Result<(), Executi
     }
 }
 
-#{cfg(test)}
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::decoder::{Instruction, Opcode}
