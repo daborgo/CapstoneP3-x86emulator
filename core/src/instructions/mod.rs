@@ -8,6 +8,7 @@ use std::fmt;
 pub mod push;
 pub mod sub;
 pub mod add;
+pub mod ret;
 
 use crate::cpu::CPU;
 use crate::memory::Memory;
@@ -21,6 +22,9 @@ pub enum InstructionError {
     
     /// Execution error from specific instruction
     ExecutionError(push::ExecutionError),
+
+    // Execution error from RET
+    RetError(ret::ExecutionError),
 }
 
 impl fmt::Display for InstructionError {
@@ -32,6 +36,9 @@ impl fmt::Display for InstructionError {
             InstructionError::ExecutionError(err) => {
                 write!(f, "Execution error: {}", err)
             },
+            InstructionError::RetError(err) => {
+                write!(f, "RET error: {}", err)
+            }
         }
     }
 }
@@ -47,6 +54,12 @@ impl From<push::ExecutionError> for InstructionError {
 impl From<sub::ExecutionError> for InstructionError {
     fn from(_err: sub::ExecutionError) -> Self {
         InstructionError::ExecutionError(push::ExecutionError::InvalidOperand) // TODO: Map sub errors properly
+    }
+}
+
+impl From<ret::ExecutionError> for InstructionError {
+    fn from(err: ret::ExecutionError) -> Self {
+        InstructionError::RetError(err)
     }
 }
 
@@ -98,6 +111,10 @@ pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) ->
         },
         Opcode::SUB => {
             sub::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
+        Opcode::RET => {
+            ret::execute(cpu, memory, instruction)?;
             Ok(())
         },
         // Add more instructions here as we implement them
