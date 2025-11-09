@@ -62,14 +62,13 @@ pub fn execute(
 
     //1. read value from stack
     let esp = cpu.registers.esp;
-    let value = memory.read_u32(esp)?; //4 bytes
 
-    //2. increment esp by 4
     //(check for overflow)
     if esp > 0xFFFF_FFFC {
         return Err(ExecutionError::StackOverflow);
     }
-    cpu.registers.esp = esp.wrapping_add(4); //?
+
+    let value = memory.read_u32(esp)?; //4 bytes
 
     //3.write to dest
     match dest_operand {
@@ -86,6 +85,8 @@ pub fn execute(
         }
     }
 
+    cpu.registers.esp = esp.wrapping_add(4); //?
+
     //4.advance instruction ptr
     cpu.registers.advance_ip(instruction.length as u32);
 
@@ -97,6 +98,7 @@ mod tests {
     use super::*;
     use crate::cpu::{RegisterName, Registers};
     use crate::decoder::{Instruction, Opcode, Operand};
+    use crate::memory;
 
     #[test]
     fn test_pop() {
@@ -127,5 +129,73 @@ mod tests {
         assert_eq!(cpu.registers.esp, 0x2000 + 4);
         assert_eq!(cpu.registers.eax, 0xFFFF);
         assert_eq!(cpu.registers.eip, 0x1000 + 1);
+    }
+
+    #[test]
+    fn test_pop_invalid_operand() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x1000000);
+
+        cpu.registers.esp = 0x2000;
+        cpu.registers.eip = 0x1000;
+        memory.write_u32(0x2000, 0xFFFF);
+
+        let instruction = Instruction {
+            opcode: Opcode::POP,
+            dest: Some(Operand::Immediate(10)),
+            src: None,
+            length: 1,
+        };
+
+        let err = execute(&mut cpu, &mut memory, &instruction).unwrap_err();
+        assert!(matches!(err, ExecutionError::InvalidOperand));
+
+        //ensure that registers are unchanged
+        assert_eq!(cpu.registers.esp, 0x2000);
+        assert_eq!(cpu.registers.eip, 0x1000);
+    }
+
+    #[test]
+    fn test_pop_missing_dest() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x1000000);
+
+        cpu.registers.esp = 0x2000;
+        cpu.registers.eip = 0x1000;
+        memory.write_u32(0x2000, 0xFFFF);
+
+        let instruction = Instruction {
+            opcode: Opcode::POP,
+            dest: None,
+            src: None,
+            length: 1,
+        };
+
+        let err = execute(&mut cpu, &mut memory, &instruction).unwrap_err();
+        assert!(matches!(err, ExecutionError::InvalidOperand));
+        assert_eq!(cpu.registers.esp, 0x2000);
+        assert_eq!(cpu.registers.eip, 0x1000);
+    }
+
+    #[test]
+    fn test_pop_stack_overflow_error() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x100000); //1 mb
+
+        cpu.registers.esp = 0xFFFF_FFFF;
+        cpu.registers.eip = 0x1000;
+        memory.write_u32(0x2000, 0x1);
+
+        let instruction = Instruction {
+            opcode: Opcode::POP,
+            dest: Some(Operand::Register(RegisterName::EAX)),
+            src: None,
+            length: 1,
+        };
+
+        let err = execute(&mut cpu, &mut memory, &instruction).unwrap_err();
+        assert!(matches!(err, ExecutionError::StackOverflow));
+        assert_eq!(cpu.registers.esp, 0xFFFF_FFFF);
+        assert_eq!(cpu.registers.eip, 0x1000);
     }
 }
