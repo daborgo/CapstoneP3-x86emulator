@@ -8,6 +8,7 @@ use std::fmt;
 pub mod push;
 pub mod sub;
 pub mod add;
+pub mod mov;
 pub mod jmp;
 
 use crate::cpu::CPU;
@@ -23,6 +24,7 @@ pub enum InstructionError {
     /// Execution error from specific instruction
     ExecutionError(push::ExecutionError),
 
+    MovError(String),
     /// JMP instruction specific errors
     JmpError(String),
 }
@@ -36,6 +38,9 @@ impl fmt::Display for InstructionError {
             InstructionError::ExecutionError(err) => {
                 write!(f, "Execution error: {}", err)
             },
+
+            InstructionError::MovError(msg) => {
+                write!(f, "Execution error: {}", msg)
             InstructionError::JmpError(msg) => {
                 write!(f, "JMP error: {}", msg)
             },
@@ -51,6 +56,10 @@ impl From<push::ExecutionError> for InstructionError {
     }
 }
 
+impl From<mov::ExecutionError> for InstructionError {
+    fn from(err: mov::ExecutionError) -> Self {
+        // Use Debug so mov::ExecutionError doesn't need Display/Clone/Eq
+        InstructionError::MovError(format!("{:?}", err))
 impl From<sub::ExecutionError> for InstructionError {
     fn from(_err: sub::ExecutionError) -> Self {
         InstructionError::ExecutionError(push::ExecutionError::InvalidOperand) // TODO: Map sub errors properly
@@ -107,6 +116,10 @@ pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) ->
     match instruction.opcode {
         Opcode::PUSH => {
             push::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
+        Opcode::MOV => {
+            mov::execute(cpu, memory, instruction)?;
             Ok(())
         },
         Opcode::SUB => {
