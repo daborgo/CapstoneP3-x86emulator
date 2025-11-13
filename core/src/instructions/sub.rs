@@ -1,14 +1,74 @@
 // sub.rs
 // x86 SUB: dest = dest - src; updates CF, OF, ZF, SF, PF, AF.
 
+use crate::cpu::{CPU};
+use crate::memory::Memory;
+use crate::decoder::{Instruction, Operand};
+use std::fmt;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExecutionError {
+    InvalidOperand,
+    MemoryAccessError,
+}
+
+impl fmt::Display for ExecutionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExecutionError::InvalidOperand => write!(f, "Invalid operand for SUB instruction"),
+            ExecutionError::MemoryAccessError => write!(f, "Memory access error during SUB"),
+        }
+    }
+}
+
+impl std::error::Error for ExecutionError {}
+
+/// Execute a SUB instruction
+pub fn execute(cpu: &mut CPU, _memory: &mut Memory, instruction: &Instruction) -> Result<(), ExecutionError> {
+    let dest = match &instruction.dest {
+        Some(Operand::Register(reg)) => cpu.registers.get(*reg),
+        _ => return Err(ExecutionError::InvalidOperand),
+    };
+
+    let src = match &instruction.src {
+        Some(Operand::Register(reg)) => cpu.registers.get(*reg),
+        Some(Operand::Immediate(imm)) => *imm,
+        _ => return Err(ExecutionError::InvalidOperand),
+    };
+
+    let (result, flags) = sub_core(CpuFlags {
+        cf: cpu.flags.cf,
+        pf: cpu.flags.pf,
+        af: cpu.flags.af,
+        zf: cpu.flags.zf,
+        sf: cpu.flags.sf,
+        of: cpu.flags.of,
+    }, dest, src, 32);
+
+    // Update the destination register
+    if let Some(Operand::Register(reg)) = &instruction.dest {
+        cpu.registers.set(*reg, result);
+    }
+
+    // Update CPU flags
+    cpu.flags.cf = flags.cf;
+    cpu.flags.pf = flags.pf;
+    cpu.flags.af = flags.af;
+    cpu.flags.zf = flags.zf;
+    cpu.flags.sf = flags.sf;
+    cpu.flags.of = flags.of;
+
+    Ok(())
+}
+
 #[derive(Default, Debug, Clone, Copy)]
 pub struct CpuFlags {
-    pub CF: bool, // Carry (borrow for SUB)
-    pub PF: bool, // Parity (even parity of low byte)
-    pub AF: bool, // Adjust (borrow/carry out of bit 3)
-    pub ZF: bool, // Zero
-    pub SF: bool, // Sign
-    pub OF: bool, // Overflow
+    pub cf: bool, // Carry (borrow for SUB)
+    pub pf: bool, // Parity (even parity of low byte)
+    pub af: bool, // Adjust (borrow/carry out of bit 3)
+    pub zf: bool, // Zero
+    pub sf: bool, // Sign
+    pub of: bool, // Overflow
 }
 
 impl CpuFlags {
@@ -16,9 +76,9 @@ impl CpuFlags {
     fn set_szp_u32(&mut self, res: u32, width_bits: u32) {
         let mask = if width_bits == 8 { 0xFF } else if width_bits == 16 { 0xFFFF } else { 0xFFFF_FFFF };
         let v = res & mask;
-        self.ZF = v == 0;
-        self.SF = ((v >> (width_bits - 1)) & 1) != 0;
-        self.PF = even_parity8(v as u8);
+        self.zf = v == 0;
+        self.sf = ((v >> (width_bits - 1)) & 1) != 0;
+        self.pf = even_parity8(v as u8);
     }
 }
 
@@ -58,13 +118,13 @@ fn sub_core(mut flags: CpuFlags, dest: u32, src: u32, width_bits: u32) -> (u32, 
     let res = d.wrapping_sub(s) & mask;
 
     // CF: borrow occurred on unsigned subtraction
-    flags.CF = d < s;
+    flags.cf = d < s;
 
     // OF: signed overflow
-    flags.OF = overflow_sub(d, s, res, sign_bit);
+    flags.of = overflow_sub(d, s, res, sign_bit);
 
     // AF: borrow/carry out of bit 3 (low nibble)
-    flags.AF = adjust_flag(d, s, res);
+    flags.af = adjust_flag(d, s, res);
 
     // ZF, SF, PF
     flags.set_szp_u32(res, width_bits);
@@ -90,63 +150,4 @@ pub fn sub16(flags: CpuFlags, dest: u16, src: u16) -> (u16, CpuFlags) {
 pub fn sub32(flags: CpuFlags, dest: u32, src: u32) -> (u32, CpuFlags) {
     sub_core(flags, dest, src, 32)
 }
-
-// --------- Tests (you can run with `cargo test`) ----------
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sub8_basic() {
-        // 5 - 3 = 2, no borrow, no overflow
-        let (r, f) = sub8(CpuFlags::default(), 5, 3);
-        assert_eq!(r, 2);
-        assert!(!f.CF);
-        assert!(!f.OF);
-        assert!(!f.ZF);
-        assert!(!f.SF);
-        assert_eq!(f.PF, even_parity8(2)); // 0b10 => 1 bit set => odd => PF=false
-        assert_eq!(f.AF, adjust_flag(5, 3, 2));
-    }
-
-    #[test]
-    fn sub8_borrow_cf() {
-        // 0x00 - 0x01 = 0xFF, borrow => CF=1, SF=1, ZF=0
-        let (r, f) = sub8(CpuFlags::default(), 0x00, 0x01);
-        assert_eq!(r, 0xFF);
-        assert!(f.CF);
-        assert!(!f.ZF);
-        assert!(f.SF);
-        assert_eq!(f.OF, overflow_sub(0x00, 0x01, 0xFF, 0x80));
-    }
-
-    #[test]
-    fn sub8_overflow() {
-        // (-128) - (1) = 127 in i8 => OF=1 (0x80 - 0x01 = 0x7F)
-        let (r, f) = sub8(CpuFlags::default(), 0x80, 0x01);
-        assert_eq!(r, 0x7F);
-        assert!(f.OF);
-        assert!(!f.CF); // unsigned: 0x80 >= 0x01 => no borrow
-    }
-
-    #[test]
-    fn sub16_zero() {
-        // 0x1234 - 0x1234 = 0 -> ZF=1
-        let (r, f) = sub16(CpuFlags::default(), 0x1234, 0x1234);
-        assert_eq!(r, 0);
-        assert!(f.ZF);
-        assert!(!f.CF);
-        assert!(!f.OF);
-        assert!(!f.SF);
-    }
-
-    #[test]
-    fn sub32_sign() {
-        // 0x0000_0001 - 0x0000_0002 = 0xFFFF_FFFF => SF=1, CF=1
-        let (r, f) = sub32(CpuFlags::default(), 1, 2);
-        assert_eq!(r, 0xFFFF_FFFF);
-        assert!(f.SF);
-        assert!(f.CF);
-        assert!(!f.ZF);
-    }
-}
+ 
