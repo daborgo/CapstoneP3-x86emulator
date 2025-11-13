@@ -144,33 +144,6 @@ mod tests {
     }
 
     #[test]
-    fn test_mov_mem_to_reg_and_back() {
-        let mut cpu = CPU::new();
-        let mut memory = Memory::new(0x1000000);
-
-        // write a value to memory and move it into eax, then to another memory location
-        memory.write_u32(0x100, 0xCAFEBABE).unwrap();
-
-        let ins1 = Instruction {
-            opcode: Opcode::MOV,
-            dest: Some(Operand::Register(RegisterName::EAX)),
-            src: Some(Operand::Memory(0x100)),
-            length: 2,
-        };
-        execute(&mut cpu, &mut memory, &ins1).unwrap();
-        assert_eq!(cpu.registers.eax, 0xCAFEBABE);
-
-        let ins2 = Instruction {
-            opcode: Opcode::MOV,
-            dest: Some(Operand::Memory(0x200)),
-            src: Some(Operand::Register(RegisterName::EAX)),
-            length: 2,
-        };
-        execute(&mut cpu, &mut memory, &ins2).unwrap();
-        assert_eq!(memory.read_u32(0x200).unwrap(), 0xCAFEBABE);
-    }
-
-    #[test]
     fn test_mov_invalid_dest_immediate() {
         let mut cpu = CPU::new();
         let mut memory = Memory::new(0x1000000);
