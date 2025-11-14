@@ -1,4 +1,5 @@
-import { useState } from 'react'
+// ...existing code...
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
 const SAMPLE_CODE = `section .data
@@ -14,9 +15,11 @@ export default function App() {
   const [code, setCode] = useState(SAMPLE_CODE)
   const [consoleOutput, setConsoleOutput] = useState('Hello, World!\n')
   const [steps, setSteps] = useState(0)
+  const [wasmReady, setWasmReady] = useState(false)
+  const wasmEmuRef = useRef<any | null>(null)
 
   // placeholder registers
-  const [registers] = useState({
+  const [registers, setRegisters] = useState({
     eip: '0x00001000',
     eax: '0x00000078',
     ebx: '0x00000000',
@@ -38,16 +41,102 @@ export default function App() {
     pf: 1,
   })
 
+  // 1. cd core   /   wasm-pack build --target web --out-dir ../frontend/src/wasm/pkg --dev --out-name web_x86_cor
+  // 2. cd frontend   /   npm install   /   npm run dev
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const wasm = await import('./wasm/pkg/web_x86_core')
+        const wasmAny = wasm as any
+        const init = wasmAny.default ?? wasmAny.init ?? (() => Promise.resolve())
+        await init()
+        const Emu = wasm.Emulator
+        const emu = new Emu()
+        wasmEmuRef.current = emu
+
+        const eip = `0x${emu.get_eip().toString(16).padStart(8, '0')}`
+        const eax = `0x${emu.get_eax().toString(16).padStart(8, '0')}`
+        const esp = `0x${emu.get_esp().toString(16).padStart(8, '0')}`
+
+        if (mounted) {
+          setRegisters((r) => ({ ...r, eip, eax, esp }))
+          setConsoleOutput((s) => s + 'WASM: emulator loaded\n')
+          setWasmReady(true)
+        }
+      } catch (err) {
+        console.error('WASM load error', err)
+        setConsoleOutput((s) => s + `WASM load error: ${String(err)}\n`)
+      }
+    })()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   function onRun() {
-    setConsoleOutput((s) => s + 'Run\n')
+    const emu = wasmEmuRef.current
+    if (emu) {
+      try {
+        if (typeof emu.test_add_eax_imm === 'function') {
+          emu.test_add_eax_imm()
+          setConsoleOutput((s) => s + 'WASM: test_add_eax_imm executed\n')
+        } else if (typeof emu.test_push_eax === 'function') {
+          emu.test_push_eax()
+          setConsoleOutput((s) => s + 'WASM: test_push_eax executed\n')
+        } else {
+          setConsoleOutput((s) => s + 'WASM: run not implemented\n')
+        }
+        refreshRegistersFromWasm(emu)
+      } catch (e) {
+        setConsoleOutput((s) => s + `WASM runtime error: ${String(e)}\n`)
+      }
+    } else {
+      setConsoleOutput((s) => s + 'WASM not ready\n')
+    }
   }
+
   function onStep() {
-    setSteps((n) => n + 1)
-    setConsoleOutput((s) => s + `Step ${steps + 1}\n`)
+    const emu = wasmEmuRef.current
+    if (emu && wasmReady) {
+      try {
+        const stepCount = emu.step()
+        setSteps(Number(stepCount))
+        setConsoleOutput((s) => s + `Step ${stepCount}\n`)
+        refreshRegistersFromWasm(emu)
+      } catch (e) {
+        setConsoleOutput((s) => s + `WASM step error: ${String(e)}\n`)
+      }
+    } else {
+      setConsoleOutput((s) => s + 'WASM not ready\n')
+    }
   }
+
   function onReset() {
-    setSteps(0)
-    setConsoleOutput('')
+    const emu = wasmEmuRef.current
+    if (emu && wasmReady) {
+      try {
+        emu.reset()
+        setSteps(0)
+        setConsoleOutput('')
+        refreshRegistersFromWasm(emu)
+      } catch (e) {
+        setConsoleOutput((s) => s + `WASM reset error: ${String(e)}\n`)
+      }
+    } else {
+      setConsoleOutput((s) => s + 'WASM not ready\n')
+    }
+  }
+
+  function refreshRegistersFromWasm(emu: any) {
+    try {
+      const eip = `0x${emu.get_eip().toString(16).padStart(8, '0')}`
+      const eax = `0x${emu.get_eax().toString(16).padStart(8, '0')}`
+      const esp = `0x${emu.get_esp().toString(16).padStart(8, '0')}`
+      setRegisters((r) => ({ ...r, eip, eax, esp }))
+    } catch (e) {
+      setConsoleOutput((s) => s + `WASM refresh error: ${String(e)}\n`)
+    }
   }
 
   return (
@@ -78,6 +167,7 @@ export default function App() {
         </section>
 
         <aside className="sidebar">
+          <p>Steps: {steps}</p>
           <div className="panel-heading">Registers</div>
           <div className="registers">
             <div className="reg-row"><span className="reg-name">EIP</span><span className="reg-val">{registers.eip}</span></div>

@@ -40,7 +40,8 @@ impl fmt::Display for InstructionError {
             },
 
             InstructionError::MovError(msg) => {
-                write!(f, "Execution error: {}", msg)
+                write!(f, "MOV error: {}", msg)
+            },
             InstructionError::JmpError(msg) => {
                 write!(f, "JMP error: {}", msg)
             },
@@ -60,9 +61,12 @@ impl From<mov::ExecutionError> for InstructionError {
     fn from(err: mov::ExecutionError) -> Self {
         // Use Debug so mov::ExecutionError doesn't need Display/Clone/Eq
         InstructionError::MovError(format!("{:?}", err))
+    }
+}
+
 impl From<sub::ExecutionError> for InstructionError {
     fn from(_err: sub::ExecutionError) -> Self {
-        InstructionError::ExecutionError(push::ExecutionError::InvalidOperand) // TODO: Map sub errors properly
+        InstructionError::ExecutionError(push::ExecutionError::InvalidOperand)
     }
 }
 
