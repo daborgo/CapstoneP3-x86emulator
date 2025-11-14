@@ -6,6 +6,11 @@
 use std::fmt;
 
 pub mod pop;
+pub mod push;
+pub mod sub;
+pub mod add;
+pub mod mov;
+pub mod jmp;
 
 use crate::cpu::CPU;
 use crate::decoder::{Instruction, Opcode};
@@ -19,6 +24,11 @@ pub enum InstructionError {
 
     /// Execution error from specific instruction
     ExecutionError(pop::ExecutionError),
+    ExecutionError(push::ExecutionError),
+
+    MovError(String),
+    /// JMP instruction specific errors
+    JmpError(String),
 }
 
 impl fmt::Display for InstructionError {
@@ -29,7 +39,13 @@ impl fmt::Display for InstructionError {
             }
             InstructionError::ExecutionError(err) => {
                 write!(f, "Execution error: {}", err)
-            }
+            },
+
+            InstructionError::MovError(msg) => {
+                write!(f, "Execution error: {}", msg)
+            InstructionError::JmpError(msg) => {
+                write!(f, "JMP error: {}", msg)
+            },
         }
     }
 }
@@ -39,6 +55,22 @@ impl std::error::Error for InstructionError {}
 impl From<pop::ExecutionError> for InstructionError {
     fn from(err: pop::ExecutionError) -> Self {
         InstructionError::ExecutionError(err)
+    }
+}
+
+impl From<mov::ExecutionError> for InstructionError {
+    fn from(err: mov::ExecutionError) -> Self {
+        // Use Debug so mov::ExecutionError doesn't need Display/Clone/Eq
+        InstructionError::MovError(format!("{:?}", err))
+impl From<sub::ExecutionError> for InstructionError {
+    fn from(_err: sub::ExecutionError) -> Self {
+        InstructionError::ExecutionError(push::ExecutionError::InvalidOperand) // TODO: Map sub errors properly
+    }
+}
+
+impl From<String> for InstructionError {
+    fn from(err: String) -> Self {
+        InstructionError::JmpError(err)
     }
 }
 
@@ -91,9 +123,22 @@ pub fn execute(
         Opcode::POP => {
             pop::execute(cpu, memory, instruction);
             Ok(())
-        } // Add more instructions here as we implement them
-          // Opcode::ADD => add::execute(cpu, memory, instruction)?,
-          // Opcode::MOV => mov::execute(cpu, memory, instruction)?,
-          // etc.
+        },
+        Opcode::MOV => {
+            mov::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
+        Opcode::SUB => {
+            sub::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
+        Opcode::JMP => {
+            jmp::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
+        // Add more instructions here as we implement them
+        // Opcode::ADD => add::execute(cpu, memory, instruction)?,
+        // Opcode::MOV => mov::execute(cpu, memory, instruction)?,
+        // etc.
     }
 }
