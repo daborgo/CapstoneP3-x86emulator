@@ -2,21 +2,29 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
-const SAMPLE_CODE = `section .data
-hello:
-    db 'Hello world!', 10, 0
+// Types for the generated WASM bindings
+type WasmModule = typeof import('./wasm/pkg/web_x86_core')
+type EmulatorApi = import('./wasm/pkg/web_x86_core').Emulator
 
-section .text
-    MOV EAX, hello
-    INT 2    ; print string EAX
-    HLT`
+const SAMPLE_CODE = `; Simple test: MOV and PUSH
+MOV EAX, 0x42
+MOV EBX, 0x100
+PUSH EAX
+PUSH EBX
+; After Run, check:
+; - EAX = 0x00000042
+; - EBX = 0x00000100
+; - ESP decreased by 8 (two pushes)
+; - EIP advanced past all instructions`
 
 export default function App() {
   const [code, setCode] = useState(SAMPLE_CODE)
   const [consoleOutput, setConsoleOutput] = useState('Hello, World!\n')
   const [steps, setSteps] = useState(0)
   const [wasmReady, setWasmReady] = useState(false)
-  const wasmEmuRef = useRef<any | null>(null)
+  const wasmEmuRef = useRef<EmulatorApi | null>(null)
+  const wasmModRef = useRef<WasmModule | null>(null)
+  const LOAD_ADDR = 0x00001000
 
   // placeholder registers
   const [registers, setRegisters] = useState({
@@ -32,7 +40,7 @@ export default function App() {
   })
 
   // placeholder flags
-  const [flags] = useState({
+  const [flags, setFlags] = useState({
     zf: 1,
     sf: 0,
     of: 0,
@@ -47,21 +55,14 @@ export default function App() {
     let mounted = true
     ;(async () => {
       try {
-        const wasm = await import('./wasm/pkg/web_x86_core')
-        const wasmAny = wasm as any
-        const init = wasmAny.default ?? wasmAny.init ?? (() => Promise.resolve())
-        await init()
-        const Emu = wasm.Emulator
-        const emu = new Emu()
-        wasmEmuRef.current = emu
-
-        const eip = `0x${emu.get_eip().toString(16).padStart(8, '0')}`
-        const eax = `0x${emu.get_eax().toString(16).padStart(8, '0')}`
-        const esp = `0x${emu.get_esp().toString(16).padStart(8, '0')}`
+        const wasm: WasmModule = await import('./wasm/pkg/web_x86_core')
+        // Initialize the WASM module (default export is the init function)
+        await wasm.default()
+        // Only preload module; instantiate Emulator later on Run (frontend controls lifecycle)
+        wasmModRef.current = wasm
 
         if (mounted) {
-          setRegisters((r) => ({ ...r, eip, eax, esp }))
-          setConsoleOutput((s) => s + 'WASM: emulator loaded\n')
+          setConsoleOutput((s) => s + 'WASM: module ready\n')
           setWasmReady(true)
         }
       } catch (err) {
@@ -74,41 +75,175 @@ export default function App() {
     }
   }, [])
 
-  function onRun() {
-    const emu = wasmEmuRef.current
-    if (emu) {
-      try {
-        if (typeof emu.test_add_eax_imm === 'function') {
-          emu.test_add_eax_imm()
-          setConsoleOutput((s) => s + 'WASM: test_add_eax_imm executed\n')
-        } else if (typeof emu.test_push_eax === 'function') {
-          emu.test_push_eax()
-          setConsoleOutput((s) => s + 'WASM: test_push_eax executed\n')
-        } else {
-          setConsoleOutput((s) => s + 'WASM: run not implemented\n')
-        }
-        refreshRegistersFromWasm(emu)
-      } catch (e) {
-        setConsoleOutput((s) => s + `WASM runtime error: ${String(e)}\n`)
+  // Minimal assembler: supports
+  // - MOV <REG>, <IMM32>   (encodes B8..BF + imm32)
+  // - PUSH <REG>           (encodes 50..57)
+  // - JMP <REL>            (EB rel8 if -128..127 else E9 rel32)
+  // Lines can contain comments starting with ';'
+  function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
+    const out: number[] = []
+    const errors: string[] = []
+
+    const toNum = (tok: string): number | null => {
+      const t = tok.trim()
+      if (/^0x[0-9a-f]+$/i.test(t)) {
+        return parseInt(t, 16) >>> 0
       }
-    } else {
+      if (/^[+-]?\d+$/.test(t)) {
+        return (parseInt(t, 10) >>> 0)
+      }
+      return null
+    }
+
+    const regIndex = (r: string): number => {
+      switch (r.toUpperCase()) {
+        case 'EAX': return 0
+        case 'ECX': return 1
+        case 'EDX': return 2
+        case 'EBX': return 3
+        case 'ESP': return 4
+        case 'EBP': return 5
+        case 'ESI': return 6
+        case 'EDI': return 7
+        default: return -1
+      }
+    }
+
+    const lines = src.split('\n')
+    // First pass: no labels yet; ignore unknown directives
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i]
+      const line = raw.split(';')[0].trim()
+      if (!line) continue
+
+      // Ignore very basic data/section directives for now
+      if (/^(section|db|dw|dd)\b/i.test(line)) {
+        continue
+      }
+
+      const parts = line
+        .replace(/\s+/g, ' ')
+        .replace(/\s*,\s*/g, ',')
+        .trim()
+        .split(/[\s,]/)
+        .filter(Boolean)
+
+      const op = parts[0].toUpperCase()
+      if (op === 'MOV') {
+        if (parts.length !== 3) {
+          errors.push(`Line ${i + 1}: MOV expects 2 operands`)
+          continue
+        }
+        const dst = parts[1].toUpperCase()
+        const dstIdx = regIndex(dst)
+        if (dstIdx < 0) {
+          errors.push(`Line ${i + 1}: Unsupported register '${dst}'`)
+          continue
+        }
+        const imm = toNum(parts[2])
+        if (imm == null) {
+          errors.push(`Line ${i + 1}: Expected immediate (hex like 0x123 or decimal)`)
+          continue
+        }
+        // B8..BF + imm32 (little-endian)
+        out.push(0xB8 + dstIdx)
+        out.push(imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
+      } else if (op === 'PUSH') {
+        if (parts.length !== 2) {
+          errors.push(`Line ${i + 1}: PUSH expects 1 register operand`)
+          continue
+        }
+        const r = parts[1].toUpperCase()
+        const idx = regIndex(r)
+        if (idx < 0) {
+          errors.push(`Line ${i + 1}: Unsupported register '${r}'`)
+          continue
+        }
+        out.push(0x50 + idx)
+      } else if (op === 'JMP') {
+        if (parts.length !== 2) {
+          errors.push(`Line ${i + 1}: JMP expects 1 immediate displacement`)
+          continue
+        }
+        const rel = toNum(parts[1])
+        if (rel == null) {
+          errors.push(`Line ${i + 1}: JMP displacement must be number`)
+          continue
+        }
+        // Encode as EB rel8 if in range, else E9 rel32
+        // NOTE: this 'rel' is literal displacement (not label-based) from next EIP
+        if (rel >= -128 && rel <= 127) {
+          out.push(0xEB, (rel & 0xFF) >>> 0)
+        } else {
+          out.push(0xE9, rel & 0xFF, (rel >>> 8) & 0xFF, (rel >>> 16) & 0xFF, (rel >>> 24) & 0xFF)
+        }
+      } else {
+        errors.push(`Line ${i + 1}: Unknown or unsupported mnemonic '${op}'`)
+      }
+    }
+
+    return { bytes: new Uint8Array(out), errors }
+  }
+
+  function onRun() {
+    if (!wasmReady || !wasmModRef.current) {
       setConsoleOutput((s) => s + 'WASM not ready\n')
+      return
+    }
+
+    // Instantiate a fresh Emulator when user decides to Run
+    const { Emulator } = wasmModRef.current
+    const emu = new Emulator()
+    wasmEmuRef.current = emu
+
+    const { bytes, errors } = assemble(code)
+    if (errors.length) {
+      setConsoleOutput((s) => s + errors.map((e) => `ASM error: ${e}`).join('\n') + '\n')
+      return
+    }
+
+    try {
+      // load assembled bytes at LOAD_ADDR
+      emu.load_program(bytes, LOAD_ADDR)
+      setConsoleOutput((s) => s + `Assembled ${bytes.length} bytes. Running...\n`)
+
+      // Run up to a small instruction budget to avoid infinite loops
+      const MAX_STEPS = 256
+      for (let i = 0; i < MAX_STEPS; i++) {
+        emu.step()
+      }
+      const total = Number(emu.get_steps?.() ?? 0)
+      setSteps(total)
+      refreshRegistersFromWasm(emu)
+      setConsoleOutput((s) => s + `Run complete. Steps=${total}\n`)
+    } catch (e) {
+      setConsoleOutput((s) => s + `WASM runtime error: ${String(e)}\n`)
     }
   }
 
   function onStep() {
-    const emu = wasmEmuRef.current
-    if (emu && wasmReady) {
-      try {
-        const stepCount = emu.step()
-        setSteps(Number(stepCount))
-        setConsoleOutput((s) => s + `Step ${stepCount}\n`)
-        refreshRegistersFromWasm(emu)
-      } catch (e) {
-        setConsoleOutput((s) => s + `WASM step error: ${String(e)}\n`)
-      }
-    } else {
+    if (!wasmReady || !wasmModRef.current) {
       setConsoleOutput((s) => s + 'WASM not ready\n')
+      return
+    }
+
+    // Create emulator if it doesn't exist yet
+    if (!wasmEmuRef.current) {
+      const { Emulator } = wasmModRef.current
+      const emu = new Emulator()
+      wasmEmuRef.current = emu
+      setConsoleOutput((s) => s + 'Created new emulator instance\n')
+    }
+
+    const emu = wasmEmuRef.current
+    try {
+      emu.step()
+      const stepCount = Number(emu.get_steps())
+      setSteps(stepCount)
+      setConsoleOutput((s) => s + `Step ${stepCount}\n`)
+      refreshRegistersFromWasm(emu)
+    } catch (e) {
+      setConsoleOutput((s) => s + `WASM step error: ${String(e)}\n`)
     }
   }
 
@@ -128,12 +263,35 @@ export default function App() {
     }
   }
 
-  function refreshRegistersFromWasm(emu: any) {
+  function refreshRegistersFromWasm(emu: EmulatorApi) {
     try {
-      const eip = `0x${emu.get_eip().toString(16).padStart(8, '0')}`
-      const eax = `0x${emu.get_eax().toString(16).padStart(8, '0')}`
-      const esp = `0x${emu.get_esp().toString(16).padStart(8, '0')}`
-      setRegisters((r) => ({ ...r, eip, eax, esp }))
+      const fmt = (n: number | bigint) => {
+        const val = typeof n === 'bigint' ? Number(n) : n
+        return `0x${val.toString(16).padStart(8, '0')}`
+      }
+
+      const eip = fmt(emu.get_eip())
+      const eax = fmt(emu.get_eax())
+      const ebx = fmt(emu.get_ebx())
+      const ecx = fmt(emu.get_ecx())
+      const edx = fmt(emu.get_edx())
+      const ebp = fmt(emu.get_ebp())
+      const esp = fmt(emu.get_esp())
+      const esi = fmt(emu.get_esi())
+      const edi = fmt(emu.get_edi())
+
+      setRegisters({ eip, eax, ebx, ecx, edx, ebp, esp, esi, edi })
+
+      const zf = emu.get_zf() ? 1 : 0
+      const sf = emu.get_sf() ? 1 : 0
+      const of = emu.get_of() ? 1 : 0
+      const cf = emu.get_cf() ? 1 : 0
+      const pf = emu.get_pf() ? 1 : 0
+      // DF is not implemented in core; keep 0 for now
+      const df = 0
+
+      // update flags panel
+      setFlags({ zf, sf, of, cf, df, pf })
     } catch (e) {
       setConsoleOutput((s) => s + `WASM refresh error: ${String(e)}\n`)
     }
