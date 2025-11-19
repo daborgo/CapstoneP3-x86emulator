@@ -7,14 +7,12 @@ use std::fmt;
 
 pub mod pop;
 pub mod push;
+pub mod call;
 pub mod sub;
 pub mod add;
-<<<<<<< HEAD
 pub mod mov;
 pub mod jmp;
-=======
 pub mod ret;
->>>>>>> josh-ret-instruction
 
 use crate::cpu::CPU;
 use crate::decoder::{Instruction, Opcode};
@@ -30,14 +28,11 @@ pub enum InstructionError {
     ExecutionError(pop::ExecutionError),
     ExecutionError(push::ExecutionError),
 
-<<<<<<< HEAD
     MovError(String),
     /// JMP instruction specific errors
     JmpError(String),
-=======
     // Execution error from RET
     RetError(ret::ExecutionError),
->>>>>>> josh-ret-instruction
 }
 
 impl fmt::Display for InstructionError {
@@ -49,18 +44,15 @@ impl fmt::Display for InstructionError {
             InstructionError::ExecutionError(err) => {
                 write!(f, "Execution error: {}", err)
             },
-<<<<<<< HEAD
 
             InstructionError::MovError(msg) => {
                 write!(f, "Execution error: {}", msg)
             InstructionError::JmpError(msg) => {
                 write!(f, "JMP error: {}", msg)
             },
-=======
             InstructionError::RetError(err) => {
                 write!(f, "RET error: {}", err)
             }
->>>>>>> josh-ret-instruction
         }
     }
 }
@@ -83,15 +75,12 @@ impl From<sub::ExecutionError> for InstructionError {
     }
 }
 
-<<<<<<< HEAD
 impl From<String> for InstructionError {
     fn from(err: String) -> Self {
         InstructionError::JmpError(err)
-=======
 impl From<ret::ExecutionError> for InstructionError {
     fn from(err: ret::ExecutionError) -> Self {
         InstructionError::RetError(err)
->>>>>>> josh-ret-instruction
     }
 }
 
@@ -153,15 +142,19 @@ pub fn execute(
             sub::execute(cpu, memory, instruction)?;
             Ok(())
         },
-<<<<<<< HEAD
         Opcode::JMP => {
             jmp::execute(cpu, memory, instruction)?;
-=======
+            Ok(())
+        };
         Opcode::RET => {
             ret::execute(cpu, memory, instruction)?;
->>>>>>> josh-ret-instruction
             Ok(())
         },
+        Opcode::CALL => {
+            call::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
+        
         // Add more instructions here as we implement them
         // Opcode::ADD => add::execute(cpu, memory, instruction)?,
         // Opcode::MOV => mov::execute(cpu, memory, instruction)?,

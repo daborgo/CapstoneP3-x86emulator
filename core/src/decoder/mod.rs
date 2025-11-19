@@ -41,9 +41,12 @@ impl std::error::Error for DecodeError {}
 /// This can be expanded as we add more instructions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Opcode {
+    // POP instruction - pop register from top of stack
     POP,
     /// PUSH instruction - push register onto stack
     PUSH,
+    // CALL instruction - call from memory
+    CALL,
     /// MOV instruction - move from source to destination
     MOV,
     /// SUB instruction - subtract source from destination
@@ -57,6 +60,7 @@ impl fmt::Display for Opcode {
         match self {
             Opcode::POP => write!(f, "POP"),
             Opcode::PUSH => write!(f, "PUSH"),
+            Opcode::CALL => write!(f, "CALL"),
             Opcode::MOV  => write!(f, "MOV"),
             Opcode::SUB => write!(f, "SUB"),
             Opcode::JMP => write!(f, "JMP"),
@@ -147,7 +151,11 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0x55 => Ok(Opcode::PUSH),  // PUSH EBP
         0x56 => Ok(Opcode::PUSH),  // PUSH ESI
         0x57 => Ok(Opcode::PUSH),  // PUSH EDI
+      
+        // CALL Instruction
+        0xE8 => Ok(Opcode::CALL),
 
+        // MOV instruction
         0xB8 => Ok(Opcode::MOV), // MOV EAX
         0xB9 => Ok(Opcode::MOV), // MOV ECX
         0xBA => Ok(Opcode::MOV), // MOV EDX
@@ -247,6 +255,18 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 length: 1,
             })
         },
+        Opcode::CALL => {
+            if bytes.len() < 5 {
+                return Err(DecodeError::InsufficientBytes);
+            }
+            let disp = u32::from_le_bytes(bytes[1..5].try_into().unwrap());
+            Ok(Instruction {
+                opcode,
+                dest: None,
+                src: Some(Operand::Immediate(disp)),
+                length: 5,
+            })
+        },
         
          Opcode::MOV => {
             // Handle MOV imm32 -> reg (opcodes 0xB8 .. 0xBF)
@@ -266,8 +286,8 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 src: Some(Operand::Immediate(imm)),
                 length: 5,
             })
-
-        }
+        },
+      
         Opcode::JMP => {
             match opcode_byte {
                 0xEB => {
