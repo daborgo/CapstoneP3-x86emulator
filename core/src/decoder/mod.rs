@@ -57,7 +57,7 @@ impl fmt::Display for Opcode {
         match self {
             Opcode::POP => write!(f, "POP"),
             Opcode::PUSH => write!(f, "PUSH"),
-            Opcode::MOV  => write!(f, "MOV"),
+            Opcode::MOV => write!(f, "MOV"),
             Opcode::SUB => write!(f, "SUB"),
             Opcode::JMP => write!(f, "JMP"),
         }
@@ -139,14 +139,14 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0x58..=0x5F => Ok(Opcode::POP),
 
         // PUSH register instructions (0x50-0x57)
-        0x50 => Ok(Opcode::PUSH),  // PUSH EAX
-        0x51 => Ok(Opcode::PUSH),  // PUSH ECX
-        0x52 => Ok(Opcode::PUSH),  // PUSH EDX
-        0x53 => Ok(Opcode::PUSH),  // PUSH EBX
-        0x54 => Ok(Opcode::PUSH),  // PUSH ESP
-        0x55 => Ok(Opcode::PUSH),  // PUSH EBP
-        0x56 => Ok(Opcode::PUSH),  // PUSH ESI
-        0x57 => Ok(Opcode::PUSH),  // PUSH EDI
+        0x50 => Ok(Opcode::PUSH), // PUSH EAX
+        0x51 => Ok(Opcode::PUSH), // PUSH ECX
+        0x52 => Ok(Opcode::PUSH), // PUSH EDX
+        0x53 => Ok(Opcode::PUSH), // PUSH EBX
+        0x54 => Ok(Opcode::PUSH), // PUSH ESP
+        0x55 => Ok(Opcode::PUSH), // PUSH EBP
+        0x56 => Ok(Opcode::PUSH), // PUSH ESI
+        0x57 => Ok(Opcode::PUSH), // PUSH EDI
 
         0xB8 => Ok(Opcode::MOV), // MOV EAX
         0xB9 => Ok(Opcode::MOV), // MOV ECX
@@ -157,23 +157,37 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0xBE => Ok(Opcode::MOV), // MOV ESI
         0xBF => Ok(Opcode::MOV), // MOV EDI
 
-        
         // JMP instructions
-        0xEB => Ok(Opcode::JMP),  // Short JMP rel8
-        0xE9 => Ok(Opcode::JMP),  // Near JMP rel32
-        0xFF => Ok(Opcode::JMP),  // Indirect JMP r/m32
-        
+        0xEB => Ok(Opcode::JMP), // Short JMP rel8
+        0xE9 => Ok(Opcode::JMP), // Near JMP rel32
+        0xFF => Ok(Opcode::JMP), // Indirect JMP r/m32
+
         // SUB instructions
-        0x28 => Ok(Opcode::SUB),  // SUB r/m8, r8
-        0x29 => Ok(Opcode::SUB),  // SUB r/m32, r32
-        0x2A => Ok(Opcode::SUB),  // SUB r8, r/m8
-        0x2B => Ok(Opcode::SUB),  // SUB r32, r/m32
-        0x2C => Ok(Opcode::SUB),  // SUB AL, imm8
-        0x2D => Ok(Opcode::SUB),  // SUB EAX, imm32
-        0x80 => Ok(Opcode::SUB),  // SUB r/m8, imm8 (when reg field of ModRM = /5)
-        0x81 => Ok(Opcode::SUB),  // SUB r/m32, imm32 (when reg field of ModRM = /5)
-        0x83 => Ok(Opcode::SUB),  // SUB r/m32, imm8 (when reg field of ModRM = /5)
-        
+        0x28 => Ok(Opcode::SUB), // SUB r/m8, r8
+        0x29 => Ok(Opcode::SUB), // SUB r/m32, r32
+        0x2A => Ok(Opcode::SUB), // SUB r8, r/m8
+        0x2B => Ok(Opcode::SUB), // SUB r32, r/m32
+        0x2C => Ok(Opcode::SUB), // SUB AL, imm8
+        0x2D => Ok(Opcode::SUB), // SUB EAX, imm32
+        0x80 => Ok(Opcode::SUB), // SUB r/m8, imm8 (when reg field of ModRM = /5)
+        0x81 => Ok(Opcode::SUB), // SUB r/m32, imm32 (when reg field of ModRM = /5)
+        0x83 => Ok(Opcode::SUB), // SUB r/m32, imm8 (when reg field of ModRM = /5)
+
+        _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
+    }
+}
+
+pub fn get_push_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, DecodeError> {
+    match opcode_byte {
+        0x50 => Ok(crate::cpu::RegisterName::EAX),
+        0x51 => Ok(crate::cpu::RegisterName::ECX),
+        0x52 => Ok(crate::cpu::RegisterName::EDX),
+        0x53 => Ok(crate::cpu::RegisterName::EBX),
+        0x54 => Ok(crate::cpu::RegisterName::ESP),
+        0x55 => Ok(crate::cpu::RegisterName::EBP),
+        0x56 => Ok(crate::cpu::RegisterName::ESI),
+        0x57 => Ok(crate::cpu::RegisterName::EDI),
+
         _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
     }
 }
@@ -208,8 +222,6 @@ fn mov_imm_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, DecodeE
     }
 }
 
-
-
 /// Decode instruction bytes into a structured Instruction
 ///
 /// This is the main decoding function that takes raw bytes
@@ -238,6 +250,17 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
     let opcode = parse_opcode(opcode_byte)?;
 
     match opcode {
+        Opcode::PUSH => {
+            // PUSH register instructions are 1 byte
+            let register = get_push_register(opcode_byte)?;
+
+            Ok(Instruction {
+                opcode,
+                dest: None, // PUSH doesn't have a destination
+                src: Some(Operand::Register(register)),
+                length: 1,
+            })
+        }
         Opcode::POP => {
             let register = get_pop_register(opcode_byte)?;
             Ok(Instruction {
@@ -246,9 +269,9 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 src: None,
                 length: 1,
             })
-        },
-        
-         Opcode::MOV => {
+        }
+
+        Opcode::MOV => {
             // Handle MOV imm32 -> reg (opcodes 0xB8 .. 0xBF)
             // Instruction layout: opcode (1 byte) + imm32 (4 bytes)
             if bytes.len() < 5 {
@@ -266,7 +289,6 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 src: Some(Operand::Immediate(imm)),
                 length: 5,
             })
-
         }
         Opcode::JMP => {
             match opcode_byte {
@@ -281,33 +303,33 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                         src: None,
                         length: 2,
                     })
-                },
+                }
                 0xE9 => {
                     // Near JMP (32-bit displacement)
                     if bytes.len() < 5 {
                         return Err(DecodeError::InsufficientBytes);
                     }
-                    let displacement = ((bytes[4] as u32) << 24) |
-                                     ((bytes[3] as u32) << 16) |
-                                     ((bytes[2] as u32) << 8) |
-                                     (bytes[1] as u32);
+                    let displacement = ((bytes[4] as u32) << 24)
+                        | ((bytes[3] as u32) << 16)
+                        | ((bytes[2] as u32) << 8)
+                        | (bytes[1] as u32);
                     Ok(Instruction {
                         opcode,
                         dest: Some(Operand::Immediate(displacement)),
                         src: None,
                         length: 5,
                     })
-                },
+                }
                 _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
             }
-        },
+        }
         Opcode::SUB => {
             // For now, we'll implement a simple case: SUB between registers
             // This will need to be expanded based on the ModR/M byte and other forms
             if bytes.len() < 2 {
                 return Err(DecodeError::InsufficientBytes);
             }
-            
+
             // For this example, we'll assume it's a register-to-register SUB
             // In a full implementation, you'd need to parse the ModR/M byte properly
             let dest_reg = match bytes[1] >> 3 & 0x7 {
@@ -333,14 +355,14 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 7 => crate::cpu::RegisterName::EDI,
                 _ => unreachable!(),
             };
-            
+
             Ok(Instruction {
                 opcode,
                 dest: Some(Operand::Register(dest_reg)),
                 src: Some(Operand::Register(src_reg)),
-                length: 2,  // opcode byte + ModR/M byte
+                length: 2, // opcode byte + ModR/M byte
             })
-        },
+        }
     }
 }
 
@@ -348,20 +370,20 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
 mod tests {
     use super::*;
     use crate::cpu::RegisterName;
-    
+
     #[test]
     fn test_parse_opcode_push() {
         assert_eq!(parse_opcode(0x50), Ok(Opcode::PUSH));
         assert_eq!(parse_opcode(0x51), Ok(Opcode::PUSH));
         assert_eq!(parse_opcode(0x57), Ok(Opcode::PUSH));
     }
-    
+
     #[test]
     fn test_parse_opcode_unknown() {
         assert!(parse_opcode(0x00).is_err());
-        assert!(parse_opcode(0x10).is_err());  // Use a different invalid opcode
+        assert!(parse_opcode(0x10).is_err()); // Use a different invalid opcode
     }
-    
+
     #[test]
     fn test_get_push_register() {
         assert_eq!(get_push_register(0x50), Ok(RegisterName::EAX));
@@ -373,40 +395,40 @@ mod tests {
         assert_eq!(get_push_register(0x56), Ok(RegisterName::ESI));
         assert_eq!(get_push_register(0x57), Ok(RegisterName::EDI));
     }
-    
+
     #[test]
     fn test_decode_push_eax() {
         let bytes = [0x50];
         let instruction = decode(&bytes).unwrap();
-        
+
         assert_eq!(instruction.opcode, Opcode::PUSH);
         assert_eq!(instruction.dest, None);
         assert_eq!(instruction.src, Some(Operand::Register(RegisterName::EAX)));
         assert_eq!(instruction.length, 1);
     }
-    
+
     #[test]
     fn test_decode_push_ebx() {
         let bytes = [0x53];
         let instruction = decode(&bytes).unwrap();
-        
+
         assert_eq!(instruction.opcode, Opcode::PUSH);
         assert_eq!(instruction.src, Some(Operand::Register(RegisterName::EBX)));
         assert_eq!(instruction.length, 1);
     }
-    
+
     #[test]
     fn test_decode_empty_bytes() {
         let bytes = [];
         assert!(decode(&bytes).is_err());
     }
-    
+
     #[test]
     fn test_instruction_display() {
         let bytes = [0x50];
         let instruction = decode(&bytes).unwrap();
         let formatted = format!("{}", instruction);
-        
+
         assert!(formatted.contains("PUSH"));
         assert!(formatted.contains("EAX"));
         assert!(formatted.contains("1 bytes"));
@@ -426,9 +448,9 @@ mod tests {
 
     fn test_decode_sub_register() {
         // Example: SUB EAX, EBX (register-to-register form)
-        let bytes = [0x2B, 0xC3];  // 0x2B is SUB r32,r/m32, 0xC3 is ModR/M byte for EAX,EBX
+        let bytes = [0x2B, 0xC3]; // 0x2B is SUB r32,r/m32, 0xC3 is ModR/M byte for EAX,EBX
         let instruction = decode(&bytes).unwrap();
-        
+
         assert_eq!(instruction.opcode, Opcode::SUB);
         assert_eq!(instruction.dest, Some(Operand::Register(RegisterName::EAX)));
         assert_eq!(instruction.src, Some(Operand::Register(RegisterName::EBX)));
