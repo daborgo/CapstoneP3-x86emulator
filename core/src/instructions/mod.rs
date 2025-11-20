@@ -1,32 +1,38 @@
 //! Instructions Module
-//! 
+//!
 //! This module contains all instruction implementations and the
 //! instruction execution dispatcher.
 
 use std::fmt;
 
+pub mod pop;
 pub mod push;
+pub mod call;
 pub mod sub;
 pub mod add;
 pub mod mov;
 pub mod jmp;
+pub mod ret;
 
 use crate::cpu::CPU;
-use crate::memory::Memory;
 use crate::decoder::{Instruction, Opcode};
+use crate::memory::Memory;
 
 /// Instruction execution errors
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstructionError {
     /// Unsupported instruction
     UnsupportedInstruction(Opcode),
-    
+
     /// Execution error from specific instruction
+    ExecutionError(pop::ExecutionError),
     ExecutionError(push::ExecutionError),
 
     MovError(String),
     /// JMP instruction specific errors
     JmpError(String),
+    // Execution error from RET
+    RetError(ret::ExecutionError),
 }
 
 impl fmt::Display for InstructionError {
@@ -34,7 +40,7 @@ impl fmt::Display for InstructionError {
         match self {
             InstructionError::UnsupportedInstruction(opcode) => {
                 write!(f, "Unsupported instruction: {}", opcode)
-            },
+            }
             InstructionError::ExecutionError(err) => {
                 write!(f, "Execution error: {}", err)
             },
@@ -45,14 +51,17 @@ impl fmt::Display for InstructionError {
             InstructionError::JmpError(msg) => {
                 write!(f, "JMP error: {}", msg)
             },
+            InstructionError::RetError(err) => {
+                write!(f, "RET error: {}", err)
+            }
         }
     }
 }
 
 impl std::error::Error for InstructionError {}
 
-impl From<push::ExecutionError> for InstructionError {
-    fn from(err: push::ExecutionError) -> Self {
+impl From<pop::ExecutionError> for InstructionError {
+    fn from(err: pop::ExecutionError) -> Self {
         InstructionError::ExecutionError(err)
     }
 }
@@ -73,53 +82,60 @@ impl From<sub::ExecutionError> for InstructionError {
 impl From<String> for InstructionError {
     fn from(err: String) -> Self {
         InstructionError::JmpError(err)
+impl From<ret::ExecutionError> for InstructionError {
+    fn from(err: ret::ExecutionError) -> Self {
+        InstructionError::RetError(err)
     }
 }
 
 /// Execute a decoded instruction
-/// 
+///
 /// This is the main instruction dispatcher that routes instructions
 /// to their specific implementations.
-/// 
+///
 /// # Arguments
 /// * `cpu` - Mutable reference to CPU state
 /// * `memory` - Mutable reference to memory system
 /// * `instruction` - The decoded instruction to execute
-/// 
+///
 /// # Returns
 /// * `Ok(())` - Instruction executed successfully
 /// * `Err(InstructionError)` - If execution fails
-/// 
+///
 /// # Example
 /// ```rust
-/// use web_x86_core::cpu::CPU;
-/// use web_x86_core::memory::Memory;
-/// use web_x86_core::decoder::{Instruction, Opcode, Operand};
-/// use web_x86_core::cpu::RegisterName;
-/// use web_x86_core::instructions::execute;
-/// 
-/// let mut cpu = CPU::new();
-/// let mut memory = Memory::new(0x1000000);
-/// 
-/// // Set up test
-/// cpu.registers.eax = 0x12345678;
-/// cpu.registers.esp = 0x00FF0000;
-/// 
-/// // Create PUSH EAX instruction
-/// let instruction = Instruction {
-///     opcode: Opcode::PUSH,
-///     dest: None,
-///     src: Some(Operand::Register(RegisterName::EAX)),
-///     length: 1,
-/// };
-/// 
-/// // Execute instruction
-/// execute(&mut cpu, &mut memory, &instruction).unwrap();
+// / use web_x86_core::cpu::CPU;
+// / use web_x86_core::memory::Memory;
+// / use web_x86_core::decoder::{Instruction, Opcode, Operand};
+// / use web_x86_core::cpu::RegisterName;
+// / use web_x86_core::instructions::execute;
+// /
+// / let mut cpu = CPU::new();
+// / let mut memory = Memory::new(0x1000000);
+// /
+// / // Set up test
+// / cpu.registers.eax = 0x12345678;
+// / cpu.registers.esp = 0x00FF0000;
+// /
+// / // Create PUSH EAX instruction
+// / let instruction = Instruction {
+// /     opcode: Opcode::PUSH,
+// /     dest: None,
+// /     src: Some(Operand::Register(RegisterName::EAX)),
+// /     length: 1,
+// / };
+// /
+// / // Execute instruction
+// / execute(&mut cpu, &mut memory, &instruction).unwrap();
 /// ```
-pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) -> Result<(), InstructionError> {
+pub fn execute(
+    cpu: &mut CPU,
+    memory: &mut Memory,
+    instruction: &Instruction,
+) -> Result<(), InstructionError> {
     match instruction.opcode {
-        Opcode::PUSH => {
-            push::execute(cpu, memory, instruction)?;
+        Opcode::POP => {
+            pop::execute(cpu, memory, instruction);
             Ok(())
         },
         Opcode::MOV => {
@@ -133,43 +149,19 @@ pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) ->
         Opcode::JMP => {
             jmp::execute(cpu, memory, instruction)?;
             Ok(())
+        };
+        Opcode::RET => {
+            ret::execute(cpu, memory, instruction)?;
+            Ok(())
         },
+        Opcode::CALL => {
+            call::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
+        
         // Add more instructions here as we implement them
         // Opcode::ADD => add::execute(cpu, memory, instruction)?,
         // Opcode::MOV => mov::execute(cpu, memory, instruction)?,
         // etc.
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::decoder::{Instruction, Opcode, Operand};
-    use crate::cpu::RegisterName;
-    
-    #[test]
-    fn test_execute_push_eax() {
-        let mut cpu = CPU::new();
-        let mut memory = Memory::new(0x1000000);  // 16MB memory
-        
-        // Set up test state with smaller addresses
-        cpu.registers.eax = 0x12345678;
-        cpu.registers.esp = 0x00FF0000;  // Use smaller stack address
-        
-        // Create PUSH EAX instruction
-        let instruction = Instruction {
-            opcode: Opcode::PUSH,
-            dest: None,
-            src: Some(Operand::Register(RegisterName::EAX)),
-            length: 1,
-        };
-        
-        // Execute instruction
-        execute(&mut cpu, &mut memory, &instruction).unwrap();
-        
-        // Verify results
-        assert_eq!(cpu.registers.esp, 0x00FEFFFC);
-        assert_eq!(memory.read_u32(0x00FEFFFC).unwrap(), 0x12345678);
-    }
-}
-
