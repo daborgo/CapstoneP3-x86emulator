@@ -1,4 +1,3 @@
-// ...existing code...
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
@@ -48,6 +47,9 @@ export default function App() {
     df: 0,
     pf: 1,
   })
+
+  // Memory view (visualization grid). 48 bytes (6 rows × 8 cols) to match mockup.
+  const [memoryView, setMemoryView] = useState<number[]>(Array(48).fill(0))
 
   // 1. cd core   /   wasm-pack build --target web --out-dir ../frontend/src/wasm/pkg --dev --out-name web_x86_cor
   // 2. cd frontend   /   npm install   /   npm run dev
@@ -292,6 +294,21 @@ export default function App() {
 
       // update flags panel
       setFlags({ zf, sf, of, cf, df, pf })
+
+      // Try to read a small memory window starting at LOAD_ADDR if emulator exposes read_u8
+      try {
+        const readFn = (emu as any).read_u8
+        if (typeof readFn === 'function') {
+          const bytes: number[] = []
+          for (let i = 0; i < memoryView.length; i++) {
+            const v = (emu as any).read_u8(LOAD_ADDR + i)
+            bytes.push(Number(v) & 0xFF)
+          }
+          setMemoryView(bytes)
+        }
+      } catch (e) {
+        setConsoleOutput((s) => s + `${String(e)}\n`)
+      }
     } catch (e) {
       setConsoleOutput((s) => s + `WASM refresh error: ${String(e)}\n`)
     }
@@ -347,6 +364,25 @@ export default function App() {
             <div className="reg-row"><span className="reg-name">CF</span><span className="reg-val">{flags.cf}</span></div>
             <div className="reg-row"><span className="reg-name">DF</span><span className="reg-val">{flags.df}</span></div>
             <div className="reg-row"><span className="reg-name">PF</span><span className="reg-val">{flags.pf}</span></div>
+          </div>
+
+          <div className="panel-heading" style={{ marginTop: 12 }}>Memory</div>
+          <div className="memory-grid" role="grid" aria-label="Memory view" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6 }}>
+            {memoryView.map((b, i) => {
+              const hex = b.toString(16).toUpperCase().padStart(1, '0')
+              return (
+                <div key={i} className="mem-cell" role="gridcell" aria-label={`Byte ${i}`} style={{
+                  border: '1px solid #ddd',
+                  borderRadius: 6,
+                  padding: '6px 8px',
+                  textAlign: 'center',
+                  fontFamily: 'monospace',
+                  background: '#fff'
+                }}>
+                  {hex}
+                </div>
+              )
+            })}
           </div>
         </aside>
 
