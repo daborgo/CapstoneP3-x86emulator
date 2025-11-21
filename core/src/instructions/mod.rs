@@ -24,14 +24,15 @@ pub enum InstructionError {
     /// Unsupported instruction
     UnsupportedInstruction(Opcode),
 
-    /// Execution error from specific instruction
-    ExecutionError(pop::ExecutionError),
-    ExecutionError(push::ExecutionError),
-
+    /// Execution error from specific instructions
+    PopError(pop::ExecutionError),
+    PushError(push::ExecutionError),
     MovError(String),
+    SubError(sub::ExecutionError),
+    AddError(add::ExecutionError),
     /// JMP instruction specific errors
     JmpError(String),
-    // Execution error from RET
+    /// Execution error from RET
     RetError(ret::ExecutionError),
 }
 
@@ -40,20 +41,28 @@ impl fmt::Display for InstructionError {
         match self {
             InstructionError::UnsupportedInstruction(opcode) => {
                 write!(f, "Unsupported instruction: {}", opcode)
-            }
-            InstructionError::ExecutionError(err) => {
-                write!(f, "Execution error: {}", err)
             },
-
+            InstructionError::PopError(err) => {
+                write!(f, "POP error: {}", err)
+            },
+            InstructionError::PushError(err) => {
+                write!(f, "PUSH error: {}", err)
+            },
             InstructionError::MovError(msg) => {
                 write!(f, "MOV error: {}", msg)
+            },
+            InstructionError::SubError(err) => {
+                write!(f, "SUB error: {:?}", err)
+            },
+            InstructionError::AddError(err) => {
+                write!(f, "ADD error: {:?}", err)
             },
             InstructionError::JmpError(msg) => {
                 write!(f, "JMP error: {}", msg)
             },
             InstructionError::RetError(err) => {
                 write!(f, "RET error: {}", err)
-            }
+            },
         }
     }
 }
@@ -62,7 +71,13 @@ impl std::error::Error for InstructionError {}
 
 impl From<pop::ExecutionError> for InstructionError {
     fn from(err: pop::ExecutionError) -> Self {
-        InstructionError::ExecutionError(err)
+        InstructionError::PopError(err)
+    }
+}
+
+impl From<push::ExecutionError> for InstructionError {
+    fn from(err: push::ExecutionError) -> Self {
+        InstructionError::PushError(err)
     }
 }
 
@@ -74,8 +89,14 @@ impl From<mov::ExecutionError> for InstructionError {
 }
 
 impl From<sub::ExecutionError> for InstructionError {
-    fn from(_err: sub::ExecutionError) -> Self {
-        InstructionError::ExecutionError(push::ExecutionError::InvalidOperand)
+    fn from(err: sub::ExecutionError) -> Self {
+        InstructionError::SubError(err)
+    }
+}
+
+impl From<add::ExecutionError> for InstructionError {
+    fn from(err: add::ExecutionError) -> Self {
+        InstructionError::AddError(err)
     }
 }
 
@@ -88,12 +109,6 @@ impl From<String> for InstructionError {
 impl From<ret::ExecutionError> for InstructionError {
     fn from(err: ret::ExecutionError) -> Self {
         InstructionError::RetError(err)
-    }
-}
-
-impl From<add::ExecutionError> for InstructionError {
-    fn from(err: add::ExecutionError) -> Self {
-        InstructionError::ExecutionError(push::ExecutionError::InvalidOperand)
     }
 }
 
@@ -144,7 +159,7 @@ pub fn execute(
 ) -> Result<(), InstructionError> {
     match instruction.opcode {
         Opcode::POP => {
-            pop::execute(cpu, memory, instruction);
+            pop::execute(cpu, memory, instruction)?;
             Ok(())
         },
         Opcode::PUSH => {

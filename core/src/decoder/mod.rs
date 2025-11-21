@@ -218,6 +218,31 @@ pub fn get_pop_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, Dec
     }
 }
 
+/// Get the register for a PUSH opcode
+/// 
+/// PUSH instructions use a simple encoding where the opcode
+/// directly indicates which register to push.
+/// 
+/// # Arguments
+/// * `opcode_byte` - The opcode byte (0x50-0x57)
+/// 
+/// # Returns
+/// * `Ok(RegisterName)` - The register to push
+/// * `Err(DecodeError)` - If the opcode is invalid
+pub fn get_push_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, DecodeError> {
+    match opcode_byte {
+        0x50 => Ok(crate::cpu::RegisterName::EAX),
+        0x51 => Ok(crate::cpu::RegisterName::ECX),
+        0x52 => Ok(crate::cpu::RegisterName::EDX),
+        0x53 => Ok(crate::cpu::RegisterName::EBX),
+        0x54 => Ok(crate::cpu::RegisterName::ESP),
+        0x55 => Ok(crate::cpu::RegisterName::EBP),
+        0x56 => Ok(crate::cpu::RegisterName::ESI),
+        0x57 => Ok(crate::cpu::RegisterName::EDI),
+        _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
+    }
+}
+
 fn mov_imm_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, DecodeError> {
     match opcode_byte {
         0xB8 => Ok(crate::cpu::RegisterName::EAX),
@@ -269,6 +294,15 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 opcode,
                 dest: Some(Operand::Register(register)),
                 src: None,
+                length: 1,
+            })
+        },
+        Opcode::PUSH => {
+            let register = get_push_register(opcode_byte)?;
+            Ok(Instruction {
+                opcode,
+                dest: None,
+                src: Some(Operand::Register(register)),
                 length: 1,
             })
         },
