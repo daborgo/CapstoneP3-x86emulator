@@ -5,16 +5,17 @@ import './App.css'
 type WasmModule = typeof import('./wasm/pkg/web_x86_core')
 type EmulatorApi = import('./wasm/pkg/web_x86_core').Emulator
 
-const SAMPLE_CODE = `; Simple test: MOV and PUSH
-MOV EAX, 0x42
-MOV EBX, 0x100
+const SAMPLE_CODE = `; Demo: MOV, PUSH, POP, SUB, and ADD
+MOV EAX, 0x100
+MOV EBX, 0x50
+ADD EAX, EBX
+SUB EAX, 0x30
 PUSH EAX
-PUSH EBX
+POP ECX
 ; After Run, check:
-; - EAX = 0x00000042
-; - EBX = 0x00000100
-; - ESP decreased by 8 (two pushes)
-; - EIP advanced past all instructions`
+; - EAX = 0x00000120 (0x100 + 0x50 - 0x30)
+; - ECX = 0x00000120 (popped from stack)
+; - EBX = 0x00000050 (unchanged)`
 
 export default function App() {
   const [code, setCode] = useState(SAMPLE_CODE)
@@ -179,6 +180,90 @@ export default function App() {
         } else {
           out.push(0xE9, rel & 0xFF, (rel >>> 8) & 0xFF, (rel >>> 16) & 0xFF, (rel >>> 24) & 0xFF)
         }
+      } else if (op === 'POP') {
+        if (parts.length !== 2) {
+          errors.push(`Line ${i + 1}: POP expects 1 register operand`)
+          continue
+        }
+        const r = parts[1].toUpperCase()
+        const idx = regIndex(r)
+        if (idx < 0) {
+          errors.push(`Line ${i + 1}: Unsupported register '${r}'`)
+          continue
+        }
+        // POP register: opcodes 0x58..0x5F
+        out.push(0x58 + idx)
+      } else if (op === 'SUB') {
+        if (parts.length !== 3) {
+          errors.push(`Line ${i + 1}: SUB expects 2 operands`)
+          continue
+        }
+        const dst = parts[1].toUpperCase()
+        const dstIdx = regIndex(dst)
+        if (dstIdx < 0) {
+          errors.push(`Line ${i + 1}: Unsupported destination register '${dst}'`)
+          continue
+        }
+        
+        // Check if source is register or immediate
+        const srcReg = parts[2].toUpperCase()
+        const srcIdx = regIndex(srcReg)
+        
+        if (srcIdx >= 0) {
+          // SUB reg, reg: opcode 0x29 + ModR/M byte
+          // ModR/M: 11 dst src (both in register mode)
+          const modrm = 0xC0 | (srcIdx << 3) | dstIdx
+          out.push(0x29, modrm)
+        } else {
+          // SUB reg, imm: opcode 0x81 + ModR/M byte (reg field = 5 for SUB) + imm32
+          const imm = toNum(parts[2])
+          if (imm == null) {
+            errors.push(`Line ${i + 1}: Expected register or immediate (hex like 0x123 or decimal)`)
+            continue
+          }
+          // ModR/M: 11 101 dst (register mode, SUB opcode extension /5)
+          const modrm = 0xE8 | dstIdx
+          out.push(0x81, modrm, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
+        }
+      } else if (op === 'ADD') {
+        if (parts.length !== 3) {
+          errors.push(`Line ${i + 1}: ADD expects 2 operands`)
+          continue
+        }
+        const dst = parts[1].toUpperCase()
+        const dstIdx = regIndex(dst)
+        if (dstIdx < 0) {
+          errors.push(`Line ${i + 1}: Unsupported destination register '${dst}'`)
+          continue
+        }
+        
+        // Check if source is register or immediate
+        const srcReg = parts[2].toUpperCase()
+        const srcIdx = regIndex(srcReg)
+        
+        if (srcIdx >= 0) {
+          // ADD reg, reg: opcode 0x01 + ModR/M byte
+          // ModR/M: 11 src dst (both in register mode)
+          const modrm = 0xC0 | (srcIdx << 3) | dstIdx
+          out.push(0x01, modrm)
+        } else {
+          // ADD reg, imm: opcode 0x81 + ModR/M byte (reg field = 0 for ADD) + imm32
+          const imm = toNum(parts[2])
+          if (imm == null) {
+            errors.push(`Line ${i + 1}: Expected register or immediate (hex like 0x123 or decimal)`)
+            continue
+          }
+          // ModR/M: 11 000 dst (register mode, ADD opcode extension /0)
+          const modrm = 0xC0 | dstIdx
+          out.push(0x81, modrm, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
+        }
+      } else if (op === 'RET') {
+        if (parts.length !== 1) {
+          errors.push(`Line ${i + 1}: RET expects no operands`)
+          continue
+        }
+        // RET (near return): opcode 0xC3
+        out.push(0xC3)
       } else {
         errors.push(`Line ${i + 1}: Unknown or unsupported mnemonic '${op}'`)
       }
@@ -297,11 +382,12 @@ export default function App() {
 
       // Try to read a small memory window starting at LOAD_ADDR if emulator exposes read_u8
       try {
-        const readFn = (emu as any).read_u8
+        const emuUnknown = emu as unknown as { read_u8?: (addr: number) => number }
+        const readFn = emuUnknown.read_u8
         if (typeof readFn === 'function') {
           const bytes: number[] = []
           for (let i = 0; i < memoryView.length; i++) {
-            const v = (emu as any).read_u8(LOAD_ADDR + i)
+            const v = readFn(LOAD_ADDR + i)
             bytes.push(Number(v) & 0xFF)
           }
           setMemoryView(bytes)

@@ -82,9 +82,18 @@ impl From<sub::ExecutionError> for InstructionError {
 impl From<String> for InstructionError {
     fn from(err: String) -> Self {
         InstructionError::JmpError(err)
+    }
+}
+
 impl From<ret::ExecutionError> for InstructionError {
     fn from(err: ret::ExecutionError) -> Self {
         InstructionError::RetError(err)
+    }
+}
+
+impl From<add::ExecutionError> for InstructionError {
+    fn from(err: add::ExecutionError) -> Self {
+        InstructionError::ExecutionError(push::ExecutionError::InvalidOperand)
     }
 }
 
@@ -138,6 +147,10 @@ pub fn execute(
             pop::execute(cpu, memory, instruction);
             Ok(())
         },
+        Opcode::PUSH => {
+            push::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
         Opcode::MOV => {
             mov::execute(cpu, memory, instruction)?;
             Ok(())
@@ -146,10 +159,14 @@ pub fn execute(
             sub::execute(cpu, memory, instruction)?;
             Ok(())
         },
+        Opcode::ADD => {
+            add::add(cpu, memory, instruction)?;
+            Ok(())
+        },
         Opcode::JMP => {
             jmp::execute(cpu, memory, instruction)?;
             Ok(())
-        };
+        },
         Opcode::RET => {
             ret::execute(cpu, memory, instruction)?;
             Ok(())
@@ -158,10 +175,5 @@ pub fn execute(
             call::execute(cpu, memory, instruction)?;
             Ok(())
         },
-        
-        // Add more instructions here as we implement them
-        // Opcode::ADD => add::execute(cpu, memory, instruction)?,
-        // Opcode::MOV => mov::execute(cpu, memory, instruction)?,
-        // etc.
     }
 }

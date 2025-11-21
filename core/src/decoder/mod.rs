@@ -51,8 +51,12 @@ pub enum Opcode {
     MOV,
     /// SUB instruction - subtract source from destination
     SUB,
+    /// ADD instruction - add source to destination
+    ADD,
     /// JMP instruction - jump to target location
     JMP,
+    /// RET instruction - return from function
+    RET,
 }
 
 impl fmt::Display for Opcode {
@@ -63,7 +67,9 @@ impl fmt::Display for Opcode {
             Opcode::CALL => write!(f, "CALL"),
             Opcode::MOV  => write!(f, "MOV"),
             Opcode::SUB => write!(f, "SUB"),
+            Opcode::ADD => write!(f, "ADD"),
             Opcode::JMP => write!(f, "JMP"),
+            Opcode::RET => write!(f, "RET"),
         }
     }
 }
@@ -178,9 +184,20 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0x2B => Ok(Opcode::SUB),  // SUB r32, r/m32
         0x2C => Ok(Opcode::SUB),  // SUB AL, imm8
         0x2D => Ok(Opcode::SUB),  // SUB EAX, imm32
-        0x80 => Ok(Opcode::SUB),  // SUB r/m8, imm8 (when reg field of ModRM = /5)
-        0x81 => Ok(Opcode::SUB),  // SUB r/m32, imm32 (when reg field of ModRM = /5)
+        0x80 => Ok(Opcode::SUB),  // SUB r/m8, imm8 (when reg field of ModRM = /5) - also used for ADD with /0
+        0x81 => Ok(Opcode::SUB),  // SUB r/m32, imm32 (when reg field of ModRM = /5) - also used for ADD with /0
         0x83 => Ok(Opcode::SUB),  // SUB r/m32, imm8 (when reg field of ModRM = /5)
+        
+        // ADD instructions
+        0x00 => Ok(Opcode::ADD),  // ADD r/m8, r8
+        0x01 => Ok(Opcode::ADD),  // ADD r/m32, r32
+        0x02 => Ok(Opcode::ADD),  // ADD r8, r/m8
+        0x03 => Ok(Opcode::ADD),  // ADD r32, r/m32
+        0x04 => Ok(Opcode::ADD),  // ADD AL, imm8
+        0x05 => Ok(Opcode::ADD),  // ADD EAX, imm32
+        
+        // RET instruction
+        0xC3 => Ok(Opcode::RET),  // Near return
         
         _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
     }
@@ -361,6 +378,108 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 length: 2,  // opcode byte + ModR/M byte
             })
         },
+        Opcode::ADD => {
+            // Handle ADD instructions similar to SUB
+            match opcode_byte {
+                0x01 => {
+                    // ADD r/m32, r32: opcode 0x01 + ModR/M byte
+                    if bytes.len() < 2 {
+                        return Err(DecodeError::InsufficientBytes);
+                    }
+                    
+                    let modrm = bytes[1];
+                    let mod_bits = modrm >> 6;
+                    
+                    // For simplicity, only handle register-to-register (mod = 11)
+                    if mod_bits == 0b11 {
+                        let src_reg = match (modrm >> 3) & 0x7 {
+                            0 => crate::cpu::RegisterName::EAX,
+                            1 => crate::cpu::RegisterName::ECX,
+                            2 => crate::cpu::RegisterName::EDX,
+                            3 => crate::cpu::RegisterName::EBX,
+                            4 => crate::cpu::RegisterName::ESP,
+                            5 => crate::cpu::RegisterName::EBP,
+                            6 => crate::cpu::RegisterName::ESI,
+                            7 => crate::cpu::RegisterName::EDI,
+                            _ => unreachable!(),
+                        };
+                        
+                        let dest_reg = match modrm & 0x7 {
+                            0 => crate::cpu::RegisterName::EAX,
+                            1 => crate::cpu::RegisterName::ECX,
+                            2 => crate::cpu::RegisterName::EDX,
+                            3 => crate::cpu::RegisterName::EBX,
+                            4 => crate::cpu::RegisterName::ESP,
+                            5 => crate::cpu::RegisterName::EBP,
+                            6 => crate::cpu::RegisterName::ESI,
+                            7 => crate::cpu::RegisterName::EDI,
+                            _ => unreachable!(),
+                        };
+                        
+                        Ok(Instruction {
+                            opcode,
+                            dest: Some(Operand::Register(dest_reg)),
+                            src: Some(Operand::Register(src_reg)),
+                            length: 2,
+                        })
+                    } else {
+                        Err(DecodeError::InvalidFormat)
+                    }
+                },
+                0x81 => {
+                    // ADD r/m32, imm32: opcode 0x81 + ModR/M (with /0 for ADD) + imm32
+                    if bytes.len() < 6 {
+                        return Err(DecodeError::InsufficientBytes);
+                    }
+                    
+                    let modrm = bytes[1];
+                    let mod_bits = modrm >> 6;
+                    let reg_field = (modrm >> 3) & 0x7;
+                    
+                    // Check if reg field is 0 (ADD) - otherwise it might be another instruction
+                    if reg_field != 0 {
+                        // This is not ADD, could be SUB (/5) or other
+                        return Err(DecodeError::InvalidFormat);
+                    }
+                    
+                    // Only handle register mode (mod = 11)
+                    if mod_bits == 0b11 {
+                        let dest_reg = match modrm & 0x7 {
+                            0 => crate::cpu::RegisterName::EAX,
+                            1 => crate::cpu::RegisterName::ECX,
+                            2 => crate::cpu::RegisterName::EDX,
+                            3 => crate::cpu::RegisterName::EBX,
+                            4 => crate::cpu::RegisterName::ESP,
+                            5 => crate::cpu::RegisterName::EBP,
+                            6 => crate::cpu::RegisterName::ESI,
+                            7 => crate::cpu::RegisterName::EDI,
+                            _ => unreachable!(),
+                        };
+                        
+                        let imm = u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]);
+                        
+                        Ok(Instruction {
+                            opcode,
+                            dest: Some(Operand::Register(dest_reg)),
+                            src: Some(Operand::Immediate(imm)),
+                            length: 6,
+                        })
+                    } else {
+                        Err(DecodeError::InvalidFormat)
+                    }
+                },
+                _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
+            }
+        },
+        Opcode::RET => {
+            // RET is a single byte instruction (near return)
+            Ok(Instruction {
+                opcode,
+                dest: None,
+                src: None,
+                length: 1,
+            })
+        },
     }
 }
 
@@ -378,7 +497,7 @@ mod tests {
     
     #[test]
     fn test_parse_opcode_unknown() {
-        assert!(parse_opcode(0x00).is_err());
+        assert!(parse_opcode(0x06).is_err());  // Changed from 0x00 which is now ADD
         assert!(parse_opcode(0x10).is_err());  // Use a different invalid opcode
     }
     
