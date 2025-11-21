@@ -45,6 +45,19 @@ impl Emulator {
         }
     }
 
+    /// Load a program's raw bytes into memory at a given address and set EIP there
+    /// Returns Err(String) on memory write failure.
+    pub fn load_program(&mut self, program: Vec<u8>, load_address: u32) -> Result<(), String> {
+        for (i, byte) in program.iter().enumerate() {
+            let addr = load_address.wrapping_add(i as u32);
+            self.memory
+                .write_u8(addr, *byte)
+                .map_err(|e| e.to_string())?;
+        }
+        self.cpu.registers.eip = load_address;
+        Ok(())
+    }
+
     /// Execute one instruction using fetch-decode-execute cycle
     ///
     /// This implements the complete CPU cycle:
@@ -53,15 +66,38 @@ impl Emulator {
     /// 3. EXECUTE: Execute the instruction
     /// 4. Update step counter
     pub fn step(&mut self) -> u64 {
+        // Fetch up to 15 bytes from memory starting at EIP
+        let eip = self.cpu.registers.eip;
+        let mut buffer = [0u8; 15];
+        let mut fetched = 0usize;
+        for i in 0..buffer.len() {
+            match self.memory.read_u8(eip.wrapping_add(i as u32)) {
+                Ok(b) => {
+                    buffer[i] = b;
+                    fetched += 1;
+                }
+                Err(_) => break,
+            }
+        }
+
+        if fetched == 0 {
+            // Nothing to do if we can't read memory at EIP
+            return self.steps;
+        }
+
+        // Always increment step counter (even if decode/execute fails)
         self.steps += 1;
 
-        // TODO: Implement actual fetch-decode-execute cycle
-        // For now, just increment the counter
-        //
-        // The real implementation would be:
-        // 1. let bytes = self.memory.read_bytes(self.cpu.registers.eip, 15)?;
-        // 2. let instruction = decode(&bytes)?;
-        // 3. execute(&mut self.cpu, &mut self.memory, &instruction)?;
+        match decode(&buffer[..fetched]) {
+            Ok(instruction) => {
+                // Execute the decoded instruction
+                let _ = execute(&mut self.cpu, &mut self.memory, &instruction);
+            }
+            Err(_e) => {
+                // If we cannot decode, advance by 1 byte to avoid infinite loop
+                self.cpu.registers.advance_ip(1);
+            }
+        }
 
         self.steps
     }
@@ -76,6 +112,14 @@ impl Emulator {
         self.cpu.registers.eax
     }
 
+    /// Additional register getters useful for UI
+    pub fn get_ebx(&self) -> u32 { self.cpu.registers.ebx }
+    pub fn get_ecx(&self) -> u32 { self.cpu.registers.ecx }
+    pub fn get_edx(&self) -> u32 { self.cpu.registers.edx }
+    pub fn get_ebp(&self) -> u32 { self.cpu.registers.ebp }
+    pub fn get_esi(&self) -> u32 { self.cpu.registers.esi }
+    pub fn get_edi(&self) -> u32 { self.cpu.registers.edi }
+    
     /// Set EAX register value (for testing)
     pub fn set_eax(&mut self, value: u32) {
         self.cpu.registers.eax = value;
@@ -91,6 +135,14 @@ impl Emulator {
         self.cpu.registers.esp
     }
 
+    /// Flag getters
+    pub fn get_cf(&self) -> bool { self.cpu.flags.cf }
+    pub fn get_pf(&self) -> bool { self.cpu.flags.pf }
+    pub fn get_af(&self) -> bool { self.cpu.flags.af }
+    pub fn get_zf(&self) -> bool { self.cpu.flags.zf }
+    pub fn get_sf(&self) -> bool { self.cpu.flags.sf }
+    pub fn get_of(&self) -> bool { self.cpu.flags.of }
+    
     /// Reset the emulator to initial state
     pub fn reset(&mut self) {
         self.cpu.reset();

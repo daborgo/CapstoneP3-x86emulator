@@ -98,6 +98,26 @@ dist
 # public
 
 # vuepress build output
+
+# Rust build artifacts
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+*.exe
+*.dll
+*.dll.exp
+*.rmeta
+*.d
+
+# Rust-specific build directories
+debug/
+release/
+
+# WASM build artifacts
+*.wasm
+*.js.map
+*.wasm.map
 .vuepress/dist
 
 # vuepress v2.x temp and cache directory
@@ -145,11 +165,13 @@ Cargo.lock
 
 # Added by cargo
 
-/target
-
-
-# Added by cargo
-#
-# already existing elements were commented out
+/target 
 
 #/target
+# Eclipse/IDE files
+.settings/
+.project
+.classpath
+.metadata/
+.idea/
+.vscode/
