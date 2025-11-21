@@ -1,5 +1,5 @@
 //! Instruction Decoder Module
-//!
+//! 
 //! This module handles parsing raw instruction bytes into structured
 //! instruction representations that can be executed by the CPU.
 
@@ -10,10 +10,10 @@ use std::fmt;
 pub enum DecodeError {
     /// Unknown or unsupported opcode
     UnknownOpcode(u8),
-
+    
     /// Invalid instruction format
     InvalidFormat,
-
+    
     /// Not enough bytes to decode instruction
     InsufficientBytes,
 }
@@ -23,13 +23,13 @@ impl fmt::Display for DecodeError {
         match self {
             DecodeError::UnknownOpcode(opcode) => {
                 write!(f, "Unknown opcode: 0x{:02X}", opcode)
-            }
+            },
             DecodeError::InvalidFormat => {
                 write!(f, "Invalid instruction format")
-            }
+            },
             DecodeError::InsufficientBytes => {
                 write!(f, "Not enough bytes to decode instruction")
-            }
+            },
         }
     }
 }
@@ -37,12 +37,11 @@ impl fmt::Display for DecodeError {
 impl std::error::Error for DecodeError {}
 
 /// Supported instruction opcodes
-///
+/// 
+/// For now, we'll start with a minimal set focusing on PUSH.
 /// This can be expanded as we add more instructions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Opcode {
-    // POP instruction
-    POP,
     /// PUSH instruction - push register onto stack
     PUSH,
     /// MOV instruction - move from source to destination
@@ -56,7 +55,6 @@ pub enum Opcode {
 impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Opcode::POP => write!(f, "POP"),
             Opcode::PUSH => write!(f, "PUSH"),
             Opcode::MOV  => write!(f, "MOV"),
             Opcode::SUB => write!(f, "SUB"),
@@ -70,10 +68,10 @@ impl fmt::Display for Opcode {
 pub enum Operand {
     /// Register operand (EAX, EBX, etc.)
     Register(crate::cpu::RegisterName),
-
+    
     /// Immediate value (constant)
     Immediate(u32),
-
+    
     /// Memory address
     Memory(u32),
 }
@@ -89,20 +87,20 @@ impl fmt::Display for Operand {
 }
 
 /// Decoded instruction structure
-///
+/// 
 /// This represents a fully decoded instruction ready for execution.
 /// It contains all the information needed to execute the instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Instruction {
     /// The operation to perform
     pub opcode: Opcode,
-
+    
     /// Primary operand (destination for most instructions)
     pub dest: Option<Operand>,
-
+    
     /// Secondary operand (source for most instructions)
     pub src: Option<Operand>,
-
+    
     /// Length of this instruction in bytes
     pub length: u8,
 }
@@ -110,35 +108,32 @@ pub struct Instruction {
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.opcode)?;
-
+        
         if let Some(dest) = self.dest {
             write!(f, " {}", dest)?;
         }
-
+        
         if let Some(src) = self.src {
             write!(f, ", {}", src)?;
         }
-
+        
         write!(f, " ({} bytes)", self.length)
     }
 }
 
 /// Parse a single byte opcode
-///
+/// 
 /// This function maps raw opcode bytes to our Opcode enum.
-///
+/// For now, we only support PUSH instructions.
+/// 
 /// # Arguments
 /// * `opcode_byte` - The first byte of the instruction
-///
+/// 
 /// # Returns
 /// * `Ok(Opcode)` - The decoded opcode
 /// * `Err(DecodeError)` - If the opcode is unknown
-
 pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
     match opcode_byte {
-        //POP register instructions
-        0x58..=0x5F => Ok(Opcode::POP),
-
         // PUSH register instructions (0x50-0x57)
         0x50 => Ok(Opcode::PUSH),  // PUSH EAX
         0x51 => Ok(Opcode::PUSH),  // PUSH ECX
@@ -179,17 +174,29 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
     }
 }
 
-//register for pop
-pub fn get_pop_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, DecodeError> {
+/// Get the register for a PUSH opcode
+/// 
+/// PUSH instructions use a simple encoding where the opcode
+/// directly indicates which register to push.
+/// 
+/// # Arguments
+/// * `opcode_byte` - The opcode byte (0x50-0x57)
+/// 
+/// # Returns
+/// * `Ok(RegisterName)` - The register to push
+/// * `Err(DecodeError)` - If the opcode is invalid
+pub fn get_push_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, DecodeError> {
     match opcode_byte {
-        0x58 => Ok(crate::cpu::RegisterName::EAX),
-        0x59 => Ok(crate::cpu::RegisterName::ECX),
-        0x5A => Ok(crate::cpu::RegisterName::EDX),
-        0x5B => Ok(crate::cpu::RegisterName::EBX),
-        0x5C => Ok(crate::cpu::RegisterName::ESP),
-        0x5D => Ok(crate::cpu::RegisterName::EBP),
-        0x5E => Ok(crate::cpu::RegisterName::ESI),
-        0x5F => Ok(crate::cpu::RegisterName::EDI),
+        0x50 => Ok(crate::cpu::RegisterName::EAX),
+        0x51 => Ok(crate::cpu::RegisterName::ECX),
+        0x52 => Ok(crate::cpu::RegisterName::EDX),
+        0x53 => Ok(crate::cpu::RegisterName::EBX),
+        0x54 => Ok(crate::cpu::RegisterName::ESP),
+        0x55 => Ok(crate::cpu::RegisterName::EBP),
+        0x56 => Ok(crate::cpu::RegisterName::ESI),
+        0x57 => Ok(crate::cpu::RegisterName::EDI),
+    
+
         _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
     }
 }
@@ -212,39 +219,46 @@ fn mov_imm_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, DecodeE
 
 
 /// Decode instruction bytes into a structured Instruction
-///
+/// 
 /// This is the main decoding function that takes raw bytes
 /// and produces a structured instruction ready for execution.
-///
+/// 
 /// # Arguments
 /// * `bytes` - Slice of instruction bytes starting at EIP
-///
+/// 
 /// # Returns
 /// * `Ok(Instruction)` - The decoded instruction
 /// * `Err(DecodeError)` - If decoding fails
-///
+/// 
 /// # Example
 /// ```rust
-//use web_x86_core::decoder::{decode, Opcode};
-
+/// use web_x86_core::decoder::{decode, Opcode};
+/// 
+/// // PUSH EAX instruction
+/// let bytes = [0x50];
+/// let instruction = decode(&bytes).unwrap();
+/// assert_eq!(instruction.opcode, Opcode::PUSH);
+/// ```
 pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
     // Check if we have at least one byte
     if bytes.is_empty() {
         return Err(DecodeError::InsufficientBytes);
     }
-
+    
     let opcode_byte = bytes[0];
-
+    
     // Parse the opcode
     let opcode = parse_opcode(opcode_byte)?;
-
+    
     match opcode {
-        Opcode::POP => {
-            let register = get_pop_register(opcode_byte)?;
+        Opcode::PUSH => {
+            // PUSH register instructions are 1 byte
+            let register = get_push_register(opcode_byte)?;
+            
             Ok(Instruction {
                 opcode,
-                dest: Some(Operand::Register(register)),
-                src: None,
+                dest: None,  // PUSH doesn't have a destination
+                src: Some(Operand::Register(register)),
                 length: 1,
             })
         },
@@ -267,8 +281,8 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 src: Some(Operand::Immediate(imm)),
                 length: 5,
             })
-        },
-      
+
+        }
         Opcode::JMP => {
             match opcode_byte {
                 0xEB => {
@@ -302,7 +316,6 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
             }
         },
-      
         Opcode::SUB => {
             // For now, we'll implement a simple case: SUB between registers
             // This will need to be expanded based on the ModR/M byte and other forms
@@ -438,8 +451,3 @@ mod tests {
     }
 }
 
-//         assert!(formatted.contains("POP"));
-//         assert!(formatted.contains("EAX"));
-//         assert!(formatted.contains("1 bytes"));
-//     }
-// }
