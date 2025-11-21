@@ -9,6 +9,7 @@ pub mod push;
 pub mod pop;
 pub mod sub;
 pub mod add;
+pub mod ret;
 pub mod mov;
 pub mod jmp;
 
@@ -28,7 +29,12 @@ pub enum InstructionError {
     /// Execution error from specific instruction
     ExecutionError(push::ExecutionError),
 
+    // Execution error from RET
+    RetError(ret::ExecutionError),
+  
+    // MOV instruction error
     MovError(String),
+    
     /// JMP instruction specific errors
     JmpError(String),
 }
@@ -41,6 +47,9 @@ impl fmt::Display for InstructionError {
             },
             InstructionError::ExecutionError(err) => {
                 write!(f, "Execution error: {}", err)
+            },
+            InstructionError::RetError(err) => {
+                write!(f, "RET error: {}", err)
             },
             InstructionError::PopError(err) => {
                 write!(f, "POP error: {}", err)
@@ -85,6 +94,12 @@ impl From<sub::ExecutionError> for InstructionError {
 impl From<String> for InstructionError {
     fn from(err: String) -> Self {
         InstructionError::JmpError(err)
+    }
+}
+
+impl From<ret::ExecutionError> for InstructionError {
+    fn from(err: ret::ExecutionError) -> Self {
+        InstructionError::RetError(err)
     }
 }
 
@@ -144,6 +159,10 @@ pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) ->
         },
         Opcode::SUB => {
             sub::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
+        Opcode::RET => {
+            ret::execute(cpu, memory, instruction)?;
             Ok(())
         },
         Opcode::JMP => {
