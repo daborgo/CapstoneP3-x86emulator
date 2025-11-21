@@ -48,6 +48,8 @@ pub enum Opcode {
     PUSH,
     /// MOV instruction - move from source to destination
     MOV,
+    /// RET instruction - return from procedure
+    RET,
     /// SUB instruction - subtract source from destination
     SUB,
     /// JMP instruction - jump to target location
@@ -60,6 +62,7 @@ impl fmt::Display for Opcode {
             Opcode::POP => write!(f, "POP"),
             Opcode::PUSH => write!(f, "PUSH"),
             Opcode::MOV  => write!(f, "MOV"),
+            Opcode::RET => write!(f, "RET"),
             Opcode::SUB => write!(f, "SUB"),
             Opcode::JMP => write!(f, "JMP"),
         }
@@ -167,6 +170,8 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0xBE => Ok(Opcode::MOV), // MOV ESI
         0xBF => Ok(Opcode::MOV), // MOV EDI
 
+        // RET instruction
+        0xC3 => Ok(Opcode::RET), // RET
         
         // JMP instructions
         0xEB => Ok(Opcode::JMP),  // Short JMP rel8
@@ -246,7 +251,6 @@ fn mov_imm_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, DecodeE
 }
 
 
-
 /// Decode instruction bytes into a structured Instruction
 /// 
 /// This is the main decoding function that takes raw bytes
@@ -324,6 +328,16 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
             })
         },
 
+        Opcode::RET => {
+            // RET instruction is 1 byte
+            Ok(Instruction {
+                opcode,
+                dest: None,
+                src: None,
+                length: 1,
+            })
+        },
+        
         Opcode::JMP => {
             match opcode_byte {
                 0xEB => {
