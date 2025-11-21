@@ -6,6 +6,7 @@
 use std::fmt;
 
 pub mod push;
+pub mod pop;
 pub mod sub;
 pub mod add;
 pub mod mov;
@@ -20,6 +21,9 @@ use crate::decoder::{Instruction, Opcode};
 pub enum InstructionError {
     /// Unsupported instruction
     UnsupportedInstruction(Opcode),
+
+    /// Pop error from specific instruction
+    PopError(pop::ExecutionError),
     
     /// Execution error from specific instruction
     ExecutionError(push::ExecutionError),
@@ -38,7 +42,9 @@ impl fmt::Display for InstructionError {
             InstructionError::ExecutionError(err) => {
                 write!(f, "Execution error: {}", err)
             },
-
+            InstructionError::PopError(err) => {
+                write!(f, "POP error: {}", err)
+            },
             InstructionError::MovError(msg) => {
                 write!(f, "MOV error: {}", msg)
             },
@@ -50,6 +56,12 @@ impl fmt::Display for InstructionError {
 }
 
 impl std::error::Error for InstructionError {}
+
+impl From<pop::ExecutionError> for InstructionError {
+    fn from(err: pop::ExecutionError) -> Self {
+        InstructionError::PopError(err)
+    }
+}
 
 impl From<push::ExecutionError> for InstructionError {
     fn from(err: push::ExecutionError) -> Self {
@@ -118,6 +130,10 @@ impl From<String> for InstructionError {
 /// ```
 pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) -> Result<(), InstructionError> {
     match instruction.opcode {
+        Opcode::POP => {
+            pop::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
         Opcode::PUSH => {
             push::execute(cpu, memory, instruction)?;
             Ok(())

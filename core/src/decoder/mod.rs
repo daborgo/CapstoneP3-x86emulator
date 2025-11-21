@@ -42,6 +42,8 @@ impl std::error::Error for DecodeError {}
 /// This can be expanded as we add more instructions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Opcode {
+    /// POP instruction - pop value off stack
+    POP,
     /// PUSH instruction - push register onto stack
     PUSH,
     /// MOV instruction - move from source to destination
@@ -55,6 +57,7 @@ pub enum Opcode {
 impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Opcode::POP => write!(f, "POP"),
             Opcode::PUSH => write!(f, "PUSH"),
             Opcode::MOV  => write!(f, "MOV"),
             Opcode::SUB => write!(f, "SUB"),
@@ -134,6 +137,16 @@ impl fmt::Display for Instruction {
 /// * `Err(DecodeError)` - If the opcode is unknown
 pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
     match opcode_byte {
+        // POP register instructions (0x58-0x5F)
+        0x58 => Ok(Opcode::POP),  // POP EAX
+        0x59 => Ok(Opcode::POP),  // POP ECX
+        0x5A => Ok(Opcode::POP),  // POP EDX
+        0x5B => Ok(Opcode::POP),  // POP EBX
+        0x5C => Ok(Opcode::POP),  // POP ESP
+        0x5D => Ok(Opcode::POP),  // POP EBP
+        0x5E => Ok(Opcode::POP),  // POP ESI
+        0x5F => Ok(Opcode::POP),  // POP EDI
+
         // PUSH register instructions (0x50-0x57)
         0x50 => Ok(Opcode::PUSH),  // PUSH EAX
         0x51 => Ok(Opcode::PUSH),  // PUSH ECX
@@ -144,6 +157,7 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0x56 => Ok(Opcode::PUSH),  // PUSH ESI
         0x57 => Ok(Opcode::PUSH),  // PUSH EDI
 
+        // MOV imm32 to register (0xB8-0xBF)
         0xB8 => Ok(Opcode::MOV), // MOV EAX
         0xB9 => Ok(Opcode::MOV), // MOV ECX
         0xBA => Ok(Opcode::MOV), // MOV EDX
@@ -201,6 +215,21 @@ pub fn get_push_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, De
     }
 }
 
+pub fn get_pop_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, DecodeError> {
+    match opcode_byte {
+        0x58 => Ok(crate::cpu::RegisterName::EAX),
+        0x59 => Ok(crate::cpu::RegisterName::ECX),
+        0x5A => Ok(crate::cpu::RegisterName::EDX),
+        0x5B => Ok(crate::cpu::RegisterName::EBX),
+        0x5C => Ok(crate::cpu::RegisterName::ESP),
+        0x5D => Ok(crate::cpu::RegisterName::EBP),
+        0x5E => Ok(crate::cpu::RegisterName::ESI),
+        0x5F => Ok(crate::cpu::RegisterName::EDI),
+
+        _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
+    }
+}
+
 fn mov_imm_register(opcode_byte: u8) -> Result<crate::cpu::RegisterName, DecodeError> {
     match opcode_byte {
         0xB8 => Ok(crate::cpu::RegisterName::EAX),
@@ -251,6 +280,18 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
     let opcode = parse_opcode(opcode_byte)?;
     
     match opcode {
+        Opcode::POP => {
+            // POP register instructions are 1 byte
+            let register = get_pop_register(opcode_byte)?;
+            
+            Ok(Instruction {
+                opcode,
+                dest: Some(Operand::Register(register)),
+                src: None,  // POP doesn't have a source
+                length: 1,
+            })
+        },
+
         Opcode::PUSH => {
             // PUSH register instructions are 1 byte
             let register = get_push_register(opcode_byte)?;
@@ -281,8 +322,8 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 src: Some(Operand::Immediate(imm)),
                 length: 5,
             })
+        },
 
-        }
         Opcode::JMP => {
             match opcode_byte {
                 0xEB => {
@@ -316,6 +357,7 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
             }
         },
+        
         Opcode::SUB => {
             // For now, we'll implement a simple case: SUB between registers
             // This will need to be expanded based on the ModR/M byte and other forms
@@ -356,6 +398,8 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 length: 2,  // opcode byte + ModR/M byte
             })
         },
+        // Fallback: ensure match is exhaustive in case new opcodes are added elsewhere
+        _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
     }
 }
 
