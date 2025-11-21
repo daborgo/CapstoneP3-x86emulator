@@ -17,8 +17,8 @@ pub enum InstructionError {
     /// Unsupported instruction
     UnsupportedInstruction(Opcode),
 
-    /// Execution error from specific instruction
-    ExecutionError(pop::ExecutionError),
+    //Pop error
+    PopError(pop::ExecutionError),
 }
 
 impl fmt::Display for InstructionError {
@@ -27,8 +27,8 @@ impl fmt::Display for InstructionError {
             InstructionError::UnsupportedInstruction(opcode) => {
                 write!(f, "Unsupported instruction: {}", opcode)
             }
-            InstructionError::ExecutionError(err) => {
-                write!(f, "Execution error: {}", err)
+            InstructionError::PopError(err) => {
+                write!(f, "Pop Execution error: {}", err)
             }
         }
     }
@@ -38,7 +38,7 @@ impl std::error::Error for InstructionError {}
 
 impl From<pop::ExecutionError> for InstructionError {
     fn from(err: pop::ExecutionError) -> Self {
-        InstructionError::ExecutionError(err)
+        InstructionError::PopError(err)
     }
 }
 
