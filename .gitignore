@@ -163,11 +163,6 @@ Cargo.lock
 # WASM build output
 /frontend/src/wasm/pkg/
 
-# Added by cargo
-
-/target 
-
-#/target
 # Eclipse/IDE files
 .settings/
 .project
