@@ -7,6 +7,7 @@ use std::fmt;
 
 pub mod push;
 pub mod pop;
+pub mod call;
 pub mod sub;
 pub mod add;
 pub mod ret;
@@ -37,6 +38,9 @@ pub enum InstructionError {
     
     /// JMP instruction specific errors
     JmpError(String),
+
+    /// CALL instruction specific errors
+    CallError(String),
 }
 
 impl fmt::Display for InstructionError {
@@ -59,6 +63,9 @@ impl fmt::Display for InstructionError {
             },
             InstructionError::JmpError(msg) => {
                 write!(f, "JMP error: {}", msg)
+            },
+            InstructionError::CallError(msg) => {
+                write!(f, "CALL error: {}", msg)
             },
         }
     }
@@ -102,6 +109,7 @@ impl From<ret::ExecutionError> for InstructionError {
         InstructionError::RetError(err)
     }
 }
+
 
 /// Execute a decoded instruction
 /// 
@@ -167,6 +175,10 @@ pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) ->
         },
         Opcode::JMP => {
             jmp::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
+        Opcode::CALL => {
+            call::execute(cpu, memory, instruction)?;
             Ok(())
         },
         // Add more instructions here as we implement them

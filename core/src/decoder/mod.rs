@@ -46,6 +46,8 @@ pub enum Opcode {
     POP,
     /// PUSH instruction - push register onto stack
     PUSH,
+    /// CALL instruction - call procedure
+    CALL,
     /// MOV instruction - move from source to destination
     MOV,
     /// RET instruction - return from procedure
@@ -61,6 +63,7 @@ impl fmt::Display for Opcode {
         match self {
             Opcode::POP => write!(f, "POP"),
             Opcode::PUSH => write!(f, "PUSH"),
+            Opcode::CALL => write!(f, "CALL"),
             Opcode::MOV  => write!(f, "MOV"),
             Opcode::RET => write!(f, "RET"),
             Opcode::SUB => write!(f, "SUB"),
@@ -172,6 +175,9 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
 
         // RET instruction
         0xC3 => Ok(Opcode::RET), // RET
+        
+        // CALL instruction
+        0xE8 => Ok(Opcode::CALL), // CALL rel32
         
         // JMP instructions
         0xEB => Ok(Opcode::JMP),  // Short JMP rel8
@@ -308,7 +314,24 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
             })
         },
         
-         Opcode::MOV => {
+        Opcode::CALL => {
+            // CALL rel32 instruction is 5 bytes
+            if bytes.len() < 5 {
+                return Err(DecodeError::InsufficientBytes);
+            }
+            
+            // Little-endian immediate u32 from bytes[1..5]
+            let disp = u32::from_le_bytes(bytes[1..5].try_into().unwrap());
+            
+            Ok(Instruction {
+                opcode,
+                dest: Some(Operand::Immediate(disp)),
+                src: None,
+                length: 5,
+            })
+        },
+
+        Opcode::MOV => {
             // Handle MOV imm32 -> reg (opcodes 0xB8 .. 0xBF)
             // Instruction layout: opcode (1 byte) + imm32 (4 bytes)
             if bytes.len() < 5 {
@@ -337,7 +360,7 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 length: 1,
             })
         },
-        
+
         Opcode::JMP => {
             match opcode_byte {
                 0xEB => {
