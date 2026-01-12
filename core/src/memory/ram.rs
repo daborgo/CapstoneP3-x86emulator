@@ -315,6 +315,11 @@ impl Memory {
     pub fn get_mmio(&mut self) -> &mut IoDevices {
         &mut self.mmio
     }
+
+    /// Get memory size in bytes
+    pub fn size(&self) -> usize {
+        self.size
+    }
 }
 
 #[cfg(test)]

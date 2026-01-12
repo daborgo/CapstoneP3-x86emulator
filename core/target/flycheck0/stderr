@@ -1,57 +1,15 @@
-   0.152104177s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint: fingerprint error for core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("core", ["cdylib", "rlib"], "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/src/lib.rs", Edition2021) }
-   0.152246603s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/target/debug/.fingerprint/core-fc75f6f1b743c42f/lib-core`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: std::backtrace::Backtrace::create
-   1: std::backtrace::Backtrace::capture
-   2: cargo_util::paths::read_bytes
-   3: cargo_util::paths::read
-   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   5: cargo::core::compiler::fingerprint::prepare_target
-   6: cargo::core::compiler::compile
-   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   8: cargo::ops::cargo_compile::compile_ws
-   9: cargo::ops::cargo_compile::compile_with_exec
-  10: cargo::ops::cargo_compile::compile
-  11: cargo::commands::check::exec
-  12: <cargo::cli::Exec>::exec
-  13: cargo::main
-  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  15: std::rt::lang_start::<()>::{closure#0}
-  16: std::rt::lang_start_internal
-  17: _main
-  18: <unknown>
-   0.349919289s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint: fingerprint error for core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("core", ["cdylib", "rlib"], "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/src/lib.rs", Edition2021) }
-   0.349983082s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/target/debug/.fingerprint/core-dd7118628024be76/test-lib-core`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: std::backtrace::Backtrace::create
-   1: std::backtrace::Backtrace::capture
-   2: cargo_util::paths::read_bytes
-   3: cargo_util::paths::read
-   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   5: cargo::core::compiler::fingerprint::prepare_target
-   6: cargo::core::compiler::compile
-   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   8: cargo::ops::cargo_compile::compile_ws
-   9: cargo::ops::cargo_compile::compile_with_exec
-  10: cargo::ops::cargo_compile::compile
-  11: cargo::commands::check::exec
-  12: <cargo::cli::Exec>::exec
-  13: cargo::main
-  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  15: std::rt::lang_start::<()>::{closure#0}
-  16: std::rt::lang_start_internal
-  17: _main
-  18: <unknown>
-   0.353570364s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="sub_integration"}: cargo::core::compiler::fingerprint: fingerprint error for core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core)/Check { test: true }/TargetInner { kind: "test", name: "sub_integration", benched: false, ..: with_path("/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/tests/sub_integration.rs", Edition2021) }
-   0.353635347s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="sub_integration"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/target/debug/.fingerprint/core-8e807f3da8e39591/test-integration-test-sub_integration`
+   0.020079001s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint: stale: changed "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/src/memory/ram.rs"
+   0.020106190s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint:           (vs) "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/target/debug/.fingerprint/core-fc75f6f1b743c42f/dep-lib-core"
+   0.020110918s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1768256919, nanos: 714666960 } < FileTime { seconds: 1768258666, nanos: 525745428 }
+   0.020215383s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint: fingerprint dirty for core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("core", ["cdylib", "rlib"], "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/src/lib.rs", Edition2021) }
+   0.020238241s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/target/debug/.fingerprint/core-fc75f6f1b743c42f/dep-lib-core", reference_mtime: FileTime { seconds: 1768256919, nanos: 714666960 }, stale: "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/src/memory/ram.rs", stale_mtime: FileTime { seconds: 1768258666, nanos: 525745428 } }))
+   0.022220748s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint: stale: changed "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/src/decoder/mod.rs"
+   0.022229597s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint:           (vs) "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/target/debug/.fingerprint/core-dd7118628024be76/dep-test-lib-core"
+   0.022232861s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1768256919, nanos: 714394163 } < FileTime { seconds: 1768259644, nanos: 155540487 }
+   0.022289774s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint: fingerprint dirty for core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("core", ["cdylib", "rlib"], "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/src/lib.rs", Edition2021) }
+   0.022301155s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/target/debug/.fingerprint/core-dd7118628024be76/dep-test-lib-core", reference_mtime: FileTime { seconds: 1768256919, nanos: 714394163 }, stale: "/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/src/decoder/mod.rs", stale_mtime: FileTime { seconds: 1768259644, nanos: 155540487 } }))
+   0.022807220s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="sub_integration"}: cargo::core::compiler::fingerprint: fingerprint error for core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core)/Check { test: true }/TargetInner { kind: "test", name: "sub_integration", benched: false, ..: with_path("/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/tests/sub_integration.rs", Edition2021) }
+   0.022822944s  INFO prepare_target{force=false package_id=core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core) target="sub_integration"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/diegoborgo14/git/CapstoneP3-x86emulator/core/target/debug/.fingerprint/core-8e807f3da8e39591/test-integration-test-sub_integration`
 
 Caused by:
     No such file or directory (os error 2)
@@ -78,4 +36,3 @@ Stack backtrace:
   18: <unknown>
     Checking core v0.1.0 (/Users/diegoborgo14/git/CapstoneP3-x86emulator/core)
 error: could not compile `core` (test "sub_integration") due to 4 previous errors
-warning: build failed, waiting for other jobs to finish...

@@ -8,7 +8,7 @@
 use crate::cpu::CPU;
 use crate::memory::Memory;
 use crate::decoder::{Instruction, Operand};
-use super::push::ExecutionError; // using same error type as PUSH
+use super::push::ExecutionError; // using same error type as PUSH (private to this module)
 
 /// Runs a CALL rel32 instruction
 pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) -> Result<(), ExecutionError> {
