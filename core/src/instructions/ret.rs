@@ -42,12 +42,8 @@ pub fn execute(cpu: &mut CPU, memory: &mut Memory, _instruction: &Instruction)
 {
     let esp = cpu.registers.esp;
 
-    let mem_size = memory.size() as u32;
-    if esp > mem_size.saturating_sub(4) {
-        return Err(ExecutionError::StackUnderflow);
-    }
-
-    // Pop return address
+    // Pop return address from stack
+    // Memory bounds checking is handled by read_u32
     let ret_addr = memory.read_u32(esp)?;
     cpu.registers.esp = esp.wrapping_add(4);
     cpu.registers.eip = ret_addr;
