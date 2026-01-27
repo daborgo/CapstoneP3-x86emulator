@@ -1,5 +1,5 @@
 //! Web x86 Emulator Core
-//! 
+//!
 //! This is the main entry point for the WASM-compiled x86 emulator.
 //! It provides the public API that the frontend can call.
 
@@ -7,28 +7,28 @@ use wasm_bindgen::prelude::*;
 
 // Declare modules
 pub mod cpu;
-pub mod memory;
 pub mod decoder;
 pub mod instructions;
+pub mod memory;
 
 // Use the types we need
 use cpu::CPU;
-use memory::Memory;
 use decoder::decode;
 use instructions::execute;
+use memory::Memory;
 
 /// Main Emulator structure exposed to JavaScript
-/// 
+///
 /// This struct combines the CPU and Memory and provides
 /// the public API for the frontend.
 #[wasm_bindgen]
 pub struct Emulator {
     /// CPU state (registers, flags)
     cpu: CPU,
-    
+
     /// Memory system (RAM, MMIO)
     memory: Memory,
-    
+
     /// Step counter for debugging
     steps: u64,
 }
@@ -59,7 +59,7 @@ impl Emulator {
     }
 
     /// Execute one instruction using fetch-decode-execute cycle
-    /// 
+    ///
     /// This implements the complete CPU cycle:
     /// 1. FETCH: Read instruction bytes from memory at EIP
     /// 2. DECODE: Parse bytes into structured instruction
@@ -106,7 +106,7 @@ impl Emulator {
     pub fn get_steps(&self) -> u64 {
         self.steps
     }
-    
+
     /// Get EAX register value (for testing)
     pub fn get_eax(&self) -> u32 {
         self.cpu.registers.eax
@@ -124,12 +124,12 @@ impl Emulator {
     pub fn set_eax(&mut self, value: u32) {
         self.cpu.registers.eax = value;
     }
-    
+
     /// Get EIP (instruction pointer) value
     pub fn get_eip(&self) -> u32 {
         self.cpu.registers.eip
     }
-    
+
     /// Get ESP (stack pointer) value
     pub fn get_esp(&self) -> u32 {
         self.cpu.registers.esp
@@ -148,27 +148,5 @@ impl Emulator {
         self.cpu.reset();
         self.memory = Memory::default();
         self.steps = 0;
-    }
-    
-    /// Execute a PUSH EAX instruction (for testing)
-    /// 
-    /// This is a test method to verify PUSH instruction works.
-    /// In the real emulator, this would be handled by the step() method.
-    pub fn test_push_eax(&mut self) -> Result<(), String> {
-        // Set up test: EAX = 0x12345678
-        self.cpu.registers.eax = 0x12345678;
-        
-        // Create PUSH EAX instruction bytes
-        let instruction_bytes = [0x50];  // PUSH EAX opcode
-        
-        // Decode the instruction
-        let instruction = decode(&instruction_bytes)
-            .map_err(|e| format!("Decode error: {}", e))?;
-        
-        // Execute the instruction
-        execute(&mut self.cpu, &mut self.memory, &instruction)
-            .map_err(|e| format!("Execution error: {}", e))?;
-        
-        Ok(())
     }
 }
