@@ -25,6 +25,10 @@ export default function App() {
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
   const LOAD_ADDR = 0x00001000
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [openMenu, setOpenMenu] = useState(false);
+  const openMenuRef = useRef<HTMLDivElement | null>(null);
+
 
   // placeholder registers
   const [registers, setRegisters] = useState({
@@ -350,6 +354,36 @@ export default function App() {
     }
   }
 
+  function onOpenToggle() {
+  setOpenMenu((v) => !v);
+}
+
+function onOpenFileClick() {
+  setOpenMenu(false);
+  fileInputRef.current?.click(); // opens file picker
+}
+
+async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    setCode(text);
+    setConsoleOutput((s) => s + `Opened file: ${file.name}\n`);
+  } catch (err) {
+    console.error(err);
+    setConsoleOutput((s) => s + `Open file error: ${String(err)}\n`);
+  } finally {
+    e.target.value = ""; // allows opening the same file again later
+  }
+}
+
+function onOpenCliClick() {
+  setOpenMenu(false);
+   setConsoleOutput((s) => s + "Open via CLI: not implemented yet.\n");
+}
+
   function refreshRegistersFromWasm(emu: EmulatorApi) {
     try {
       const fmt = (n: number | bigint) => {
@@ -406,7 +440,7 @@ export default function App() {
         <div className="brand">ASU</div>
         <div className="title">Online Assembly x86 Emulator</div>
         <div className="toolbar">
-          <button>Open</button>
+          <button onClick={onOpenFileClick}>Open</button>
           <button>Save</button>
           <button>Save as</button>
           <button onClick={onRun} className="primary">Run</button>
