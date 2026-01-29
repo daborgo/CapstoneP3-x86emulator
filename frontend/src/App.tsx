@@ -359,8 +359,7 @@ export default function App() {
 }
 
 function onOpenFileClick() {
-  setOpenMenu(false);
-  fileInputRef.current?.click(); // opens file picker
+  fileInputRef.current?.click();
 }
 
 async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -369,13 +368,13 @@ async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
 
   try {
     const text = await file.text();
-    setCode(text);
+    setCode(text); // loads into your Assembly Editor textarea
     setConsoleOutput((s) => s + `Opened file: ${file.name}\n`);
   } catch (err) {
     console.error(err);
     setConsoleOutput((s) => s + `Open file error: ${String(err)}\n`);
   } finally {
-    e.target.value = ""; // allows opening the same file again later
+    e.target.value = ""; // allows selecting same file again
   }
 }
 
@@ -441,6 +440,13 @@ function onOpenCliClick() {
         <div className="title">Online Assembly x86 Emulator</div>
         <div className="toolbar">
           <button onClick={onOpenFileClick}>Open</button>
+          <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,.asm,text/plain"
+          onChange={onFileSelected}
+          style={{ display: "none" }}
+        />
           <button>Save</button>
           <button>Save as</button>
           <button onClick={onRun} className="primary">Run</button>
