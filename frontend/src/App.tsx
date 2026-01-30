@@ -26,8 +26,6 @@ export default function App() {
   const wasmModRef = useRef<WasmModule | null>(null)
   const LOAD_ADDR = 0x00001000
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [openMenu, setOpenMenu] = useState(false);
-  const openMenuRef = useRef<HTMLDivElement | null>(null);
 
 
   // placeholder registers
@@ -354,10 +352,6 @@ export default function App() {
     }
   }
 
-  function onOpenToggle() {
-  setOpenMenu((v) => !v);
-}
-
 function onOpenFileClick() {
   fileInputRef.current?.click();
 }
@@ -376,11 +370,6 @@ async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
   } finally {
     e.target.value = ""; // allows selecting same file again
   }
-}
-
-function onOpenCliClick() {
-  setOpenMenu(false);
-   setConsoleOutput((s) => s + "Open via CLI: not implemented yet.\n");
 }
 
   function refreshRegistersFromWasm(emu: EmulatorApi) {
