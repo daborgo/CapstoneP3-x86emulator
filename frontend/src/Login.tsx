@@ -5,13 +5,24 @@ import './App.css'
 export default function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
   const navigate = useNavigate()
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
+    const asuEmail = /^[^@\s]+@asu\.edu$/i
+    if (!asuEmail.test(username)) {
+      setError('Username must be an @asu.edu email.')
+      return
+    }
+    setError('')
     if (username && password) {
       navigate('/emulator')
     }
+  }
+
+  const handleSsoLogin = () => {
+    navigate('/auth')
   }
 
   return (
@@ -37,7 +48,18 @@ export default function Login() {
           maxWidth: '400px'
         }}>
           <h2 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>Login</h2>
-          
+
+          <button
+            type="button"
+            className="primary"
+            onClick={handleSsoLogin}
+            style={{ width: '100%', padding: '0.75rem', fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}
+          >
+            Login with ASU SSO
+          </button>
+
+          <div style={{ textAlign: 'center' }}>or</div>
+
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <label htmlFor="username" style={{ fontWeight: 600 }}>Username</label>
@@ -73,6 +95,7 @@ export default function Login() {
               />
             </div>
 
+            {error && <div style={{ color: '#ff0000' }}>{error}</div>}
             <button
               type="submit"
               className="primary"
