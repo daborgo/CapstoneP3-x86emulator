@@ -432,7 +432,7 @@ async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
           <input
           ref={fileInputRef}
           type="file"
-          accept=".txt,.asm,text/plain"
+          accept=".txt"
           onChange={onFileSelected}
           style={{ display: "none" }}
         />
