@@ -157,4 +157,63 @@ mod tests {
 
         assert!(execute(&mut cpu, &mut memory, &instruction).is_err());
     }
+
+    #[test]
+    fn test_mov_reg_to_mem() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x2000);
+        cpu.registers.eax = 0xCAFEBABE;
+        let instruction = Instruction {
+            opcode: Opcode::MOV,
+            dest: Some(Operand::Memory(0x1100)),
+            src: Some(Operand::Register(RegisterName::EAX)),
+            length: 1,
+        };
+        execute(&mut cpu, &mut memory, &instruction).unwrap();
+        assert_eq!(memory.read_u32(0x1100).unwrap(), 0xCAFEBABE);
+    }
+
+    #[test]
+    fn test_mov_mem_to_reg() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x2000);
+        memory.write_u32(0x1200, 0xDEADC0DE).unwrap();
+        let instruction = Instruction {
+            opcode: Opcode::MOV,
+            dest: Some(Operand::Register(RegisterName::EBX)),
+            src: Some(Operand::Memory(0x1200)),
+            length: 1,
+        };
+        execute(&mut cpu, &mut memory, &instruction).unwrap();
+        assert_eq!(cpu.registers.ebx, 0xDEADC0DE);
+    }
+
+    #[test]
+    fn test_mov_mem_to_mem() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x2000);
+        memory.write_u32(0x1300, 0x12345678).unwrap();
+        let instruction = Instruction {
+            opcode: Opcode::MOV,
+            dest: Some(Operand::Memory(0x1400)),
+            src: Some(Operand::Memory(0x1300)),
+            length: 1,
+        };
+        execute(&mut cpu, &mut memory, &instruction).unwrap();
+        assert_eq!(memory.read_u32(0x1400).unwrap(), 0x12345678);
+    }
+
+    #[test]
+    fn test_mov_imm_to_mem() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x2000);
+        let instruction = Instruction {
+            opcode: Opcode::MOV,
+            dest: Some(Operand::Memory(0x1500)),
+            src: Some(Operand::Immediate(0xBEEFCAFE)),
+            length: 1,
+        };
+        execute(&mut cpu, &mut memory, &instruction).unwrap();
+        assert_eq!(memory.read_u32(0x1500).unwrap(), 0xBEEFCAFE);
+    }
 }

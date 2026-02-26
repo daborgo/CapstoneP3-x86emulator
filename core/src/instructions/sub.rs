@@ -24,15 +24,19 @@ impl fmt::Display for ExecutionError {
 impl std::error::Error for ExecutionError {}
 
 /// Execute a SUB instruction
-pub fn execute(cpu: &mut CPU, _memory: &mut Memory, instruction: &Instruction) -> Result<(), ExecutionError> {
-    let dest = match &instruction.dest {
-        Some(Operand::Register(reg)) => cpu.registers.get(*reg),
+pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) -> Result<(), ExecutionError> {
+    // Get destination value (register or memory)
+    let (dest_val, dest_addr, dest_reg) = match &instruction.dest {
+        Some(Operand::Register(reg)) => (cpu.registers.get(*reg), None, Some(*reg)),
+        Some(Operand::Memory(addr)) => (memory.read_u32(*addr).map_err(|_| ExecutionError::MemoryAccessError)?, Some(*addr), None),
         _ => return Err(ExecutionError::InvalidOperand),
     };
 
-    let src = match &instruction.src {
+    // Get source value (register, immediate, or memory)
+    let src_val = match &instruction.src {
         Some(Operand::Register(reg)) => cpu.registers.get(*reg),
         Some(Operand::Immediate(imm)) => *imm,
+        Some(Operand::Memory(addr)) => memory.read_u32(*addr).map_err(|_| ExecutionError::MemoryAccessError)?,
         _ => return Err(ExecutionError::InvalidOperand),
     };
 
@@ -43,11 +47,13 @@ pub fn execute(cpu: &mut CPU, _memory: &mut Memory, instruction: &Instruction) -
         zf: cpu.flags.zf,
         sf: cpu.flags.sf,
         of: cpu.flags.of,
-    }, dest, src, 32);
+    }, dest_val, src_val, 32);
 
-    // Update the destination register
-    if let Some(Operand::Register(reg)) = &instruction.dest {
-        cpu.registers.set(*reg, result);
+    // Write result back to destination
+    if let Some(reg) = dest_reg {
+        cpu.registers.set(reg, result);
+    } else if let Some(addr) = dest_addr {
+        memory.write_u32(addr, result).map_err(|_| ExecutionError::MemoryAccessError)?;
     }
 
     // Update CPU flags
@@ -150,4 +156,105 @@ pub fn sub16(flags: CpuFlags, dest: u16, src: u16) -> (u16, CpuFlags) {
 pub fn sub32(flags: CpuFlags, dest: u32, src: u32) -> (u32, CpuFlags) {
     sub_core(flags, dest, src, 32)
 }
- 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::decoder::{Instruction, Operand};
+    use crate::cpu::RegisterName;
+
+    #[test]
+    fn test_sub_reg_reg() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x2000);
+        cpu.registers.eax = 10;
+        cpu.registers.ebx = 3;
+        let instruction = Instruction {
+            opcode: crate::decoder::Opcode::SUB,
+            dest: Some(Operand::Register(RegisterName::EAX)),
+            src: Some(Operand::Register(RegisterName::EBX)),
+            length: 1,
+        };
+        super::execute(&mut cpu, &mut memory, &instruction).unwrap();
+        assert_eq!(cpu.registers.eax, 7);
+    }
+
+    #[test]
+    fn test_sub_reg_mem() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x2000);
+        cpu.registers.eax = 20;
+        memory.write_u32(0x1100, 5).unwrap();
+        let instruction = Instruction {
+            opcode: crate::decoder::Opcode::SUB,
+            dest: Some(Operand::Register(RegisterName::EAX)),
+            src: Some(Operand::Memory(0x1100)),
+            length: 1,
+        };
+        super::execute(&mut cpu, &mut memory, &instruction).unwrap();
+        assert_eq!(cpu.registers.eax, 15);
+    }
+
+    #[test]
+    fn test_sub_mem_reg() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x2000);
+        memory.write_u32(0x1200, 50).unwrap();
+        cpu.registers.ebx = 8;
+        let instruction = Instruction {
+            opcode: crate::decoder::Opcode::SUB,
+            dest: Some(Operand::Memory(0x1200)),
+            src: Some(Operand::Register(RegisterName::EBX)),
+            length: 1,
+        };
+        super::execute(&mut cpu, &mut memory, &instruction).unwrap();
+        assert_eq!(memory.read_u32(0x1200).unwrap(), 42);
+    }
+
+    #[test]
+    fn test_sub_mem_mem() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x2000);
+        memory.write_u32(0x1300, 100).unwrap();
+        memory.write_u32(0x1400, 25).unwrap();
+        let instruction = Instruction {
+            opcode: crate::decoder::Opcode::SUB,
+            dest: Some(Operand::Memory(0x1300)),
+            src: Some(Operand::Memory(0x1400)),
+            length: 1,
+        };
+        super::execute(&mut cpu, &mut memory, &instruction).unwrap();
+        assert_eq!(memory.read_u32(0x1300).unwrap(), 75);
+    }
+
+    #[test]
+    fn test_sub_reg_imm() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x2000);
+        cpu.registers.eax = 30;
+        let instruction = Instruction {
+            opcode: crate::decoder::Opcode::SUB,
+            dest: Some(Operand::Register(RegisterName::EAX)),
+            src: Some(Operand::Immediate(10)),
+            length: 1,
+        };
+        super::execute(&mut cpu, &mut memory, &instruction).unwrap();
+        assert_eq!(cpu.registers.eax, 20);
+    }
+
+    #[test]
+    fn test_sub_mem_imm() {
+        let mut cpu = CPU::new();
+        let mut memory = Memory::new(0x2000);
+        memory.write_u32(0x1500, 60).unwrap();
+        let instruction = Instruction {
+            opcode: crate::decoder::Opcode::SUB,
+            dest: Some(Operand::Memory(0x1500)),
+            src: Some(Operand::Immediate(15)),
+            length: 1,
+        };
+        super::execute(&mut cpu, &mut memory, &instruction).unwrap();
+        assert_eq!(memory.read_u32(0x1500).unwrap(), 45);
+    }
+}
+
