@@ -4,6 +4,18 @@ Educational 32-bit x86 subset emulator for the web: registers, stack, calling co
 
 ## Quick Start
 
+### Predeploy: Build WASM Module
+
+If you made any changes to WASM module files or instruction files, first rebuild the WASM module:
+
+```bash
+# Move into core folder
+cd core
+
+# Build WASM module
+wasm-pack build --target web --out-dir ../frontend/src/wasm/pkg --dev --out-name web_x86_core
+```
+
 ### Option 1: Docker (Recommended)
 ```bash
 # Validate Docker setup
