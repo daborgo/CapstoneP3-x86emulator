@@ -56,7 +56,7 @@ impl Registers {
     ///
     /// Default values are chosen to represent a "clean" CPU state:
     /// - All GPRs start at 0 (undefined in real CPU, but safe for emulation)
-    /// - ESP/EBP start at stack base (0x00FF0000 in default 16MB memory)
+    /// - ESP/EBP start at stack base (0xFFFF0000)
     /// - EIP starts at code section (0x00001000)
     pub fn new() -> Self {
         Registers {
@@ -71,8 +71,8 @@ impl Registers {
 
             // Stack registers start at stack base
             // Stack grows downward from high addresses
-            ebp: 0x00FF_0000, // Base pointer at stack base
-            esp: 0x00FF_0000, // Stack pointer starts at top of stack
+            ebp: 0xFFFF_0000, // Base pointer at stack base
+            esp: 0xFFFF_0000, // Stack pointer starts at top of stack
 
             // Instruction pointer starts in code section
             // Code section begins at 0x1000 (after NULL region)

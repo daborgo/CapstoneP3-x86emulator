@@ -202,3 +202,4 @@ mod tests {
         assert!(!cpu.flags.cf); // No unsigned borrow
     }
 }
+

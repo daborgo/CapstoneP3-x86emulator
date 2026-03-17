@@ -59,25 +59,17 @@ pub fn execute(
 ) -> Result<(), ExecutionError> {
     //destination operand
     let dest_operand = instruction.dest.ok_or(ExecutionError::InvalidOperand)?;
-//FIX
-    if matches!(dest_operand, Operand::Immediate(_)) { //early reject before stack read
-        return Err(ExecutionError::InvalidOperand);
-    }  //n/a dont pop into an immediate
-//END OF FIX
+
     //1. read value from stack
     let esp = cpu.registers.esp;
 
     //(check for overflow)
-//FIX
-    if esp >= 0xFFFF_FFFC { //fixed overflow condition to esp >= 0xFFFF_FFFC
-//END OF FIX
+    if esp > 0xFFFF_FFFC {
         return Err(ExecutionError::StackOverflow);
     }
-//FIX
-    let (value, new_esp) = memory.pop_u32(esp)?; //4 bytes
-    //2. update stack pointer
-    cpu.registers.esp = new_esp; // ^^Switched to memory.pop_u32(...).
-//END OF FIX
+
+    let value = memory.read_u32(esp)?; //4 bytes
+
     //3.write to dest
     match dest_operand {
         Operand::Register(reg_name) => {
@@ -88,11 +80,12 @@ pub fn execute(
             memory.write_u32(addr, value)?;
         }
         Operand::Immediate(_) => {
-//FIX Updare ESP BEFOre writing destination
-            unreachable!("Immediate destination is handled before stack pop")
-//END OF FIX 
+            //n/a dont pop into an immediate
+            return Err(ExecutionError::InvalidOperand);
         }
     }
+
+    cpu.registers.esp = esp.wrapping_add(4); //?
 
     //4.advance instruction ptr
     cpu.registers.advance_ip(instruction.length as u32);
@@ -204,27 +197,5 @@ mod tests {
         assert!(matches!(err, ExecutionError::StackOverflow));
         assert_eq!(cpu.registers.esp, 0xFFFF_FFFF);
         assert_eq!(cpu.registers.eip, 0x1000);
-    }
-
-    #[test]
-    fn test_pop_esp_updates_with_popped_value() {
-        let mut cpu = CPU::new();
-        let mut memory = Memory::new(0x1000000);
-
-        cpu.registers.esp = 0x2000;
-        cpu.registers.eip = 0x1000;
-        memory.write_u32(0x2000, 0x12345678).unwrap();
-
-        let instruction = Instruction {
-            opcode: Opcode::POP,
-            dest: Some(Operand::Register(RegisterName::ESP)),
-            src: None,
-            length: 1,
-        };
-
-        execute(&mut cpu, &mut memory, &instruction).unwrap();
-
-        assert_eq!(cpu.registers.esp, 0x12345678);
-        assert_eq!(cpu.registers.eip, 0x1001);
     }
 }

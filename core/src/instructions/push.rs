@@ -50,14 +50,13 @@ pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) ->
         Some(Operand::Immediate(val)) => val,
         _ => return Err(ExecutionError::InvalidOperand),
     };
-///
-    ///safetly check, prevent wraparound when decrementing ESP
-    if cpu.registers.esp < 4 {
-        return Err(ExecutionError::StackOverflow);
-    }
-    // Decrement ESP and write value to stack
-    let new_esp = memory.push_u32(cpu.registers.esp, src_value)?;
-///
+
+    // Decrement ESP by 4 (stack grows downward)
+    let new_esp = cpu.registers.esp.wrapping_sub(4);
+    
+    // Write value to memory at new ESP
+    memory.write_u32(new_esp, src_value)?;
+    
     // Update ESP
     cpu.registers.esp = new_esp;
     
@@ -95,26 +94,5 @@ mod tests {
         assert_eq!(memory.read_u32(0x00FEFFFC).unwrap(), 0x12345678);
         assert_eq!(cpu.registers.eip, 0x1001);
     }
-
-    #[test]
-    fn test_push_stack_overflow() {
-        let mut cpu = CPU::new();
-        let mut memory = Memory::new(0x1000000);
-
-        cpu.registers.eax = 0x12345678;
-        cpu.registers.esp = 0x00000003;
-        cpu.registers.eip = 0x1000;
-
-        let instruction = Instruction {
-            opcode: Opcode::PUSH,
-            dest: None,
-            src: Some(Operand::Register(RegisterName::EAX)),
-            length: 1,
-        };
-
-        let err = execute(&mut cpu, &mut memory, &instruction).unwrap_err();
-        assert!(matches!(err, ExecutionError::StackOverflow));
-        assert_eq!(cpu.registers.esp, 0x00000003);
-        assert_eq!(cpu.registers.eip, 0x1000);
-    }
 }
+

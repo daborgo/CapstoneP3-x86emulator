@@ -58,8 +58,6 @@ pub fn execute(cpu: &mut CPU, _memory: &mut Memory, instruction: &Instruction) -
     cpu.flags.sf = flags.sf;
     cpu.flags.of = flags.of;
 
-    cpu.registers.advance_ip(instruction.length as u32);
-
     Ok(())
 }
 
