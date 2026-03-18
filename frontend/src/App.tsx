@@ -18,14 +18,28 @@ POP ECX
 ; - EBX = 0x00000050 (unchanged)`
 
 export default function App() {
+//zoom feature
+  const EDITOR_BASE_FONT_SIZE = 13
+  const MIN_EDITOR_ZOOM = 10
+  const MAX_EDITOR_ZOOM = 300
+  const EDITOR_ZOOM_STEP = 10
+  
   const [code, setCode] = useState(SAMPLE_CODE)
   const [consoleOutput, setConsoleOutput] = useState('Hello, World!\n')
   const [steps, setSteps] = useState(0)
   const [wasmReady, setWasmReady] = useState(false)
+  const [editorZoom, setEditorZoom] = useState(100)
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
   const LOAD_ADDR = 0x00001000
 
+  const editorFontSize = Math.round((EDITOR_BASE_FONT_SIZE * editorZoom) / 100)
+  const zoomInEditor = () => {
+    setEditorZoom((z) => Math.min(MAX_EDITOR_ZOOM, z + EDITOR_ZOOM_STEP))
+  }
+  const zoomOutEditor = () => {
+    setEditorZoom((z) => Math.max(MIN_EDITOR_ZOOM, z - EDITOR_ZOOM_STEP))
+  }
   // placeholder registers
   const [registers, setRegisters] = useState({
     eip: '0x00001000',
@@ -417,13 +431,37 @@ export default function App() {
 
       <main className="main-grid">
         <section className="editor-pane">
-          <div className="editor-header">Assembly Editor</div>
+        <div className="editor-header">
+            <span>Assembly Editor</span>
+            <div className="editor-zoom-controls" role="group" aria-label="Assembly editor zoom controls">
+              <button
+                type="button"
+                className="editor-zoom-button"
+                onClick={zoomOutEditor}
+                disabled={editorZoom <= MIN_EDITOR_ZOOM}
+                aria-label="Zoom out assembly editor"
+              >
+                -
+              </button>
+              <span className="editor-zoom-value" aria-live="polite">{editorZoom}%</span>
+              <button
+                type="button"
+                className="editor-zoom-button"
+                onClick={zoomInEditor}
+                disabled={editorZoom >= MAX_EDITOR_ZOOM}
+                aria-label="Zoom in assembly editor"
+              >
+                +
+              </button>
+            </div>
+          </div>
           <textarea
             className="editor"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             spellCheck={false}
             aria-label="Assembly editor"
+            style={{ fontSize: `${editorFontSize}px`}}
           />
         </section>
 
