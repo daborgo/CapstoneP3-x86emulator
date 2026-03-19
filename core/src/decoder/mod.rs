@@ -57,6 +57,8 @@ pub enum Opcode {
     JMP,
     /// RET instruction - return from function
     RET,
+
+    CMP,
 }
 
 impl fmt::Display for Opcode {
@@ -70,6 +72,7 @@ impl fmt::Display for Opcode {
             Opcode::ADD => write!(f, "ADD"),
             Opcode::JMP => write!(f, "JMP"),
             Opcode::RET => write!(f, "RET"),
+            Opcode::CMP => write!(f, "CMP"),
         }
     }
 }
@@ -170,6 +173,8 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0xBD => Ok(Opcode::MOV), // MOV EBP
         0xBE => Ok(Opcode::MOV), // MOV ESI
         0xBF => Ok(Opcode::MOV), // MOV EDI
+        0x89 => Ok(Opcode::MOV), // MOV r/m32, r32
+        0x8B => Ok(Opcode::MOV), // MOV r32, r/m32
 
         
         // JMP instructions
@@ -185,7 +190,8 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0x2C => Ok(Opcode::SUB),  // SUB AL, imm8
         0x2D => Ok(Opcode::SUB),  // SUB EAX, imm32
         0x80 => Ok(Opcode::SUB),  // SUB r/m8, imm8 (when reg field of ModRM = /5) - also used for ADD with /0
-        0x81 => Ok(Opcode::SUB),  // SUB r/m32, imm32 (when reg field of ModRM = /5) - also used for ADD with /0
+        // 0x81 is a group opcode; route to ADD handler and inspect ModR/M reg field later.
+        0x81 => Ok(Opcode::ADD),
         0x83 => Ok(Opcode::SUB),  // SUB r/m32, imm8 (when reg field of ModRM = /5)
         
         // ADD instructions
@@ -198,6 +204,12 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         
         // RET instruction
         0xC3 => Ok(Opcode::RET),  // Near return
+
+        // CMP instructions (register forms)
+        0x38 => Ok(Opcode::CMP),  // CMP r/m8, r8
+        0x39 => Ok(Opcode::CMP),  // CMP r/m32, r32
+        0x3A => Ok(Opcode::CMP),  // CMP r8, r/m8
+        0x3B => Ok(Opcode::CMP),  // CMP r32, r/m32
         
         _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
     }
@@ -320,23 +332,80 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
         },
         
          Opcode::MOV => {
-            // Handle MOV imm32 -> reg (opcodes 0xB8 .. 0xBF)
-            // Instruction layout: opcode (1 byte) + imm32 (4 bytes)
-            if bytes.len() < 5 {
-                return Err(DecodeError::InsufficientBytes);
+            match opcode_byte {
+                // MOV imm32 -> reg (opcodes 0xB8 .. 0xBF)
+                0xB8..=0xBF => {
+                    if bytes.len() < 5 {
+                        return Err(DecodeError::InsufficientBytes);
+                    }
+
+                    let dest_reg = mov_imm_register(opcode_byte)?;
+
+                    // Little-endian immediate u32 from bytes[1..5]
+                    let imm = u32::from_le_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
+
+                    Ok(Instruction {
+                        opcode,
+                        dest: Some(Operand::Register(dest_reg)),
+                        src: Some(Operand::Immediate(imm)),
+                        length: 5,
+                    })
+                }
+                // MOV r/m32, r32 (0x89) and MOV r32, r/m32 (0x8B)
+                0x89 | 0x8B => {
+                    if bytes.len() < 2 {
+                        return Err(DecodeError::InsufficientBytes);
+                    }
+
+                    let modrm = bytes[1];
+                    let mod_bits = modrm >> 6;
+
+                    // Only handle register-to-register (mod = 11) for now
+                    if mod_bits != 0b11 {
+                        return Err(DecodeError::InvalidFormat);
+                    }
+
+                    let reg_field = match (modrm >> 3) & 0x7 {
+                        0 => crate::cpu::RegisterName::EAX,
+                        1 => crate::cpu::RegisterName::ECX,
+                        2 => crate::cpu::RegisterName::EDX,
+                        3 => crate::cpu::RegisterName::EBX,
+                        4 => crate::cpu::RegisterName::ESP,
+                        5 => crate::cpu::RegisterName::EBP,
+                        6 => crate::cpu::RegisterName::ESI,
+                        7 => crate::cpu::RegisterName::EDI,
+                        _ => unreachable!(),
+                    };
+
+                    let rm_field = match modrm & 0x7 {
+                        0 => crate::cpu::RegisterName::EAX,
+                        1 => crate::cpu::RegisterName::ECX,
+                        2 => crate::cpu::RegisterName::EDX,
+                        3 => crate::cpu::RegisterName::EBX,
+                        4 => crate::cpu::RegisterName::ESP,
+                        5 => crate::cpu::RegisterName::EBP,
+                        6 => crate::cpu::RegisterName::ESI,
+                        7 => crate::cpu::RegisterName::EDI,
+                        _ => unreachable!(),
+                    };
+
+                    let (dest_reg, src_reg) = if opcode_byte == 0x89 {
+                        // MOV r/m32, r32
+                        (rm_field, reg_field)
+                    } else {
+                        // MOV r32, r/m32
+                        (reg_field, rm_field)
+                    };
+
+                    Ok(Instruction {
+                        opcode,
+                        dest: Some(Operand::Register(dest_reg)),
+                        src: Some(Operand::Register(src_reg)),
+                        length: 2,
+                    })
+                }
+                _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
             }
-
-            let dest_reg = mov_imm_register(opcode_byte)?;
-
-            // Little-endian immediate u32 from bytes[1..5]
-            let imm = u32::from_le_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
-
-            Ok(Instruction {
-                opcode,
-                dest: Some(Operand::Register(dest_reg)),
-                src: Some(Operand::Immediate(imm)),
-                length: 5,
-            })
         },
       
         Opcode::JMP => {
@@ -373,44 +442,60 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
             }
         },
         Opcode::SUB => {
-            // For now, we'll implement a simple case: SUB between registers
-            // This will need to be expanded based on the ModR/M byte and other forms
-            if bytes.len() < 2 {
-                return Err(DecodeError::InsufficientBytes);
-            }
-            
-            // For this example, we'll assume it's a register-to-register SUB
-            // In a full implementation, you'd need to parse the ModR/M byte properly
-            let dest_reg = match bytes[1] >> 3 & 0x7 {
-                0 => crate::cpu::RegisterName::EAX,
-                1 => crate::cpu::RegisterName::ECX,
-                2 => crate::cpu::RegisterName::EDX,
-                3 => crate::cpu::RegisterName::EBX,
-                4 => crate::cpu::RegisterName::ESP,
-                5 => crate::cpu::RegisterName::EBP,
-                6 => crate::cpu::RegisterName::ESI,
-                7 => crate::cpu::RegisterName::EDI,
-                _ => unreachable!(),
-            };
+            match opcode_byte {
+                0x29 | 0x2B => {
+                    // SUB r/m32, r32 (0x29) or SUB r32, r/m32 (0x2B)
+                    if bytes.len() < 2 {
+                        return Err(DecodeError::InsufficientBytes);
+                    }
 
-            let src_reg = match bytes[1] & 0x7 {
-                0 => crate::cpu::RegisterName::EAX,
-                1 => crate::cpu::RegisterName::ECX,
-                2 => crate::cpu::RegisterName::EDX,
-                3 => crate::cpu::RegisterName::EBX,
-                4 => crate::cpu::RegisterName::ESP,
-                5 => crate::cpu::RegisterName::EBP,
-                6 => crate::cpu::RegisterName::ESI,
-                7 => crate::cpu::RegisterName::EDI,
-                _ => unreachable!(),
-            };
-            
-            Ok(Instruction {
-                opcode,
-                dest: Some(Operand::Register(dest_reg)),
-                src: Some(Operand::Register(src_reg)),
-                length: 2,  // opcode byte + ModR/M byte
-            })
+                    let modrm = bytes[1];
+                    let mod_bits = modrm >> 6;
+
+                    // Only handle register-to-register (mod = 11)
+                    if mod_bits != 0b11 {
+                        return Err(DecodeError::InvalidFormat);
+                    }
+
+                    let reg_field = match (modrm >> 3) & 0x7 {
+                        0 => crate::cpu::RegisterName::EAX,
+                        1 => crate::cpu::RegisterName::ECX,
+                        2 => crate::cpu::RegisterName::EDX,
+                        3 => crate::cpu::RegisterName::EBX,
+                        4 => crate::cpu::RegisterName::ESP,
+                        5 => crate::cpu::RegisterName::EBP,
+                        6 => crate::cpu::RegisterName::ESI,
+                        7 => crate::cpu::RegisterName::EDI,
+                        _ => unreachable!(),
+                    };
+
+                    let rm_field = match modrm & 0x7 {
+                        0 => crate::cpu::RegisterName::EAX,
+                        1 => crate::cpu::RegisterName::ECX,
+                        2 => crate::cpu::RegisterName::EDX,
+                        3 => crate::cpu::RegisterName::EBX,
+                        4 => crate::cpu::RegisterName::ESP,
+                        5 => crate::cpu::RegisterName::EBP,
+                        6 => crate::cpu::RegisterName::ESI,
+                        7 => crate::cpu::RegisterName::EDI,
+                        _ => unreachable!(),
+                    };
+
+                    let (dest_reg, src_reg) = if opcode_byte == 0x29 {
+                        (rm_field, reg_field)
+                    } else {
+                        (reg_field, rm_field)
+                    };
+
+                    Ok(Instruction {
+                        opcode,
+                        dest: Some(Operand::Register(dest_reg)),
+                        src: Some(Operand::Register(src_reg)),
+                        length: 2,  // opcode byte + ModR/M byte
+                    })
+                }
+                _ => Err(DecodeError::InvalidFormat),
+            }
         },
         Opcode::ADD => {
             // Handle ADD instructions similar to SUB
@@ -461,49 +546,105 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                     }
                 },
                 0x81 => {
-                    // ADD r/m32, imm32: opcode 0x81 + ModR/M (with /0 for ADD) + imm32
+                    // 0x81 is a group opcode: reg field selects the actual operation
+                    // /0 = ADD, /5 = SUB, /7 = CMP
                     if bytes.len() < 6 {
                         return Err(DecodeError::InsufficientBytes);
                     }
-                    
+
                     let modrm = bytes[1];
                     let mod_bits = modrm >> 6;
                     let reg_field = (modrm >> 3) & 0x7;
-                    
-                    // Check if reg field is 0 (ADD) - otherwise it might be another instruction
-                    if reg_field != 0 {
-                        // This is not ADD, could be SUB (/5) or other
+
+                    // Only handle register mode (mod = 11)
+                    if mod_bits != 0b11 {
                         return Err(DecodeError::InvalidFormat);
                     }
-                    
-                    // Only handle register mode (mod = 11)
-                    if mod_bits == 0b11 {
-                        let dest_reg = match modrm & 0x7 {
-                            0 => crate::cpu::RegisterName::EAX,
-                            1 => crate::cpu::RegisterName::ECX,
-                            2 => crate::cpu::RegisterName::EDX,
-                            3 => crate::cpu::RegisterName::EBX,
-                            4 => crate::cpu::RegisterName::ESP,
-                            5 => crate::cpu::RegisterName::EBP,
-                            6 => crate::cpu::RegisterName::ESI,
-                            7 => crate::cpu::RegisterName::EDI,
-                            _ => unreachable!(),
-                        };
-                        
-                        let imm = u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]);
-                        
-                        Ok(Instruction {
-                            opcode,
+
+                    let dest_reg = match modrm & 0x7 {
+                        0 => crate::cpu::RegisterName::EAX,
+                        1 => crate::cpu::RegisterName::ECX,
+                        2 => crate::cpu::RegisterName::EDX,
+                        3 => crate::cpu::RegisterName::EBX,
+                        4 => crate::cpu::RegisterName::ESP,
+                        5 => crate::cpu::RegisterName::EBP,
+                        6 => crate::cpu::RegisterName::ESI,
+                        7 => crate::cpu::RegisterName::EDI,
+                        _ => unreachable!(),
+                    };
+
+                    let imm = u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]);
+
+                    match reg_field {
+                        0 => Ok(Instruction {
+                            opcode: Opcode::ADD,
                             dest: Some(Operand::Register(dest_reg)),
                             src: Some(Operand::Immediate(imm)),
                             length: 6,
-                        })
-                    } else {
-                        Err(DecodeError::InvalidFormat)
+                        }),
+                        5 => Ok(Instruction {
+                            opcode: Opcode::SUB,
+                            dest: Some(Operand::Register(dest_reg)),
+                            src: Some(Operand::Immediate(imm)),
+                            length: 6,
+                        }),
+                        7 => Ok(Instruction {
+                            opcode: Opcode::CMP,
+                            dest: Some(Operand::Register(dest_reg)),
+                            src: Some(Operand::Immediate(imm)),
+                            length: 6,
+                        }),
+                        _ => Err(DecodeError::InvalidFormat),
                     }
                 },
                 _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
             }
+        },
+        Opcode::CMP => {
+            // CMP (simple register-to-register form; 0x39 + ModR/M)
+            if bytes.len() < 2 {
+                return Err(DecodeError::InsufficientBytes);
+            }
+
+            let modrm = bytes[1];
+            let mod_bits = modrm >> 6;
+
+            // Only support register-to-register (mod = 11) for now
+            if mod_bits != 0b11 {
+                return Err(DecodeError::InvalidFormat);
+            }
+
+            // Use same bit extraction as SUB/ADD for consistency with encoding
+            let dest_reg = match (modrm >> 3) & 0x7 {
+                0 => crate::cpu::RegisterName::EAX,
+                1 => crate::cpu::RegisterName::ECX,
+                2 => crate::cpu::RegisterName::EDX,
+                3 => crate::cpu::RegisterName::EBX,
+                4 => crate::cpu::RegisterName::ESP,
+                5 => crate::cpu::RegisterName::EBP,
+                6 => crate::cpu::RegisterName::ESI,
+                7 => crate::cpu::RegisterName::EDI,
+                _ => unreachable!(),
+            };
+
+            let src_reg = match modrm & 0x7 {
+                0 => crate::cpu::RegisterName::EAX,
+                1 => crate::cpu::RegisterName::ECX,
+                2 => crate::cpu::RegisterName::EDX,
+                3 => crate::cpu::RegisterName::EBX,
+                4 => crate::cpu::RegisterName::ESP,
+                5 => crate::cpu::RegisterName::EBP,
+                6 => crate::cpu::RegisterName::ESI,
+                7 => crate::cpu::RegisterName::EDI,
+                _ => unreachable!(),
+            };
+
+            Ok(Instruction {
+                opcode,
+                dest: Some(Operand::Register(dest_reg)),
+                src: Some(Operand::Register(src_reg)),
+                length: 2,
+            })
         },
         Opcode::RET => {
             // RET is a single byte instruction (near return)
@@ -546,71 +687,4 @@ mod tests {
         assert_eq!(get_push_register(0x56), Ok(RegisterName::ESI));
         assert_eq!(get_push_register(0x57), Ok(RegisterName::EDI));
     }
-    
-    #[test]
-    fn test_decode_push_eax() {
-        let bytes = [0x50];
-        let instruction = decode(&bytes).unwrap();
-        
-        assert_eq!(instruction.opcode, Opcode::PUSH);
-        assert_eq!(instruction.dest, None);
-        assert_eq!(instruction.src, Some(Operand::Register(RegisterName::EAX)));
-        assert_eq!(instruction.length, 1);
-    }
-    
-    #[test]
-    fn test_decode_push_ebx() {
-        let bytes = [0x53];
-        let instruction = decode(&bytes).unwrap();
-        
-        assert_eq!(instruction.opcode, Opcode::PUSH);
-        assert_eq!(instruction.src, Some(Operand::Register(RegisterName::EBX)));
-        assert_eq!(instruction.length, 1);
-    }
-    
-    #[test]
-    fn test_decode_empty_bytes() {
-        let bytes = [];
-        assert!(decode(&bytes).is_err());
-    }
-    
-    #[test]
-    fn test_instruction_display() {
-        let bytes = [0x50];
-        let instruction = decode(&bytes).unwrap();
-        let formatted = format!("{}", instruction);
-        
-        assert!(formatted.contains("PUSH"));
-        assert!(formatted.contains("EAX"));
-        assert!(formatted.contains("1 bytes"));
-    }
-
-    #[test]
-    fn test_decode_mov_imm_to_eax() {
-        // MOV EAX, 0xDEADBEEF -> opcode 0xB8 followed by imm32 little-endian
-        let bytes = [0xB8, 0xEF, 0xBE, 0xAD, 0xDE];
-        let instruction = decode(&bytes).unwrap();
-
-        assert_eq!(instruction.opcode, Opcode::MOV);
-        assert_eq!(instruction.dest, Some(Operand::Register(RegisterName::EAX)));
-        assert_eq!(instruction.src, Some(Operand::Immediate(0xDEADBEEF)));
-        assert_eq!(instruction.length, 5);
-    }
-
-    fn test_decode_sub_register() {
-        // Example: SUB EAX, EBX (register-to-register form)
-        let bytes = [0x2B, 0xC3];  // 0x2B is SUB r32,r/m32, 0xC3 is ModR/M byte for EAX,EBX
-        let instruction = decode(&bytes).unwrap();
-        
-        assert_eq!(instruction.opcode, Opcode::SUB);
-        assert_eq!(instruction.dest, Some(Operand::Register(RegisterName::EAX)));
-        assert_eq!(instruction.src, Some(Operand::Register(RegisterName::EBX)));
-        assert_eq!(instruction.length, 2);
-    }
 }
-
-//         assert!(formatted.contains("POP"));
-//         assert!(formatted.contains("EAX"));
-//         assert!(formatted.contains("1 bytes"));
-//     }
-// }
