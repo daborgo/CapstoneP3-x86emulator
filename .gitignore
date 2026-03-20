@@ -161,7 +161,7 @@ release/
 Cargo.lock
 
 # WASM build output
-/frontend/src/wasm/pkg/
+# /frontend/src/wasm/pkg/
 
 # Eclipse/IDE files
 .settings/
