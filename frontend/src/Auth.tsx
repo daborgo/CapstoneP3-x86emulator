@@ -14,7 +14,8 @@ export default function Auth() {
     if (hasValidCookie) {
       navigate('/emulator')
       return
-    }
+    } 
+    navigate('/login')
   }, [navigate])
 
   return (

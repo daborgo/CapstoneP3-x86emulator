@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './App.css'
 
 // Types for the generated WASM bindings
@@ -22,10 +23,13 @@ export default function App() {
   const [consoleOutput, setConsoleOutput] = useState('Hello, World!\n')
   const [steps, setSteps] = useState(0)
   const [wasmReady, setWasmReady] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [username, setUsername] = useState<string | null>(null)
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
   const LOAD_ADDR = 0x00001000
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const navigate = useNavigate()
 
 
   // placeholder registers
@@ -53,6 +57,20 @@ export default function App() {
 
   // Memory view (visualization grid). 48 bytes (6 rows × 8 cols) to match mockup.
   const [memoryView, setMemoryView] = useState<number[]>(Array(48).fill(0))
+
+  // Check auth and role on mount
+  useEffect(() => {
+    const role = localStorage.getItem('userRole')
+    const user = localStorage.getItem('username')
+    
+    if (!role) {
+      navigate('/login')
+      return
+    }
+    
+    setUserRole(role)
+    setUsername(user || 'User')
+  }, [navigate])
 
   // 1. cd core   /   wasm-pack build --target web --out-dir ../frontend/src/wasm/pkg --dev --out-name web_x86_cor
   // 2. cd frontend   /   npm install   /   npm run dev
@@ -427,6 +445,11 @@ async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
       <header className="topbar">
         <div className="brand">ASU</div>
         <div className="title">Online Assembly x86 Emulator</div>
+        <div style={{ marginLeft: 'auto', paddingRight: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.9rem' }}>
+          <span>
+            {userRole === 'admin' ? 'Instructor/Admin' : 'Student'}: {username}
+          </span>
+        </div>
         <div className="toolbar">
           <button onClick={onOpenFileClick}>Open</button>
           <input
