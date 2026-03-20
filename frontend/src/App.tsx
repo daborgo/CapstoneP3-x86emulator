@@ -25,6 +25,8 @@ export default function App() {
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
   const LOAD_ADDR = 0x00001000
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
 
   // placeholder registers
   const [registers, setRegisters] = useState({
@@ -350,6 +352,26 @@ export default function App() {
     }
   }
 
+function onOpenFileClick() {
+  fileInputRef.current?.click();
+}
+
+async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    setCode(text); // loads into your Assembly Editor textarea
+    setConsoleOutput((s) => s + `Opened file: ${file.name}\n`);
+  } catch (err) {
+    console.error(err);
+    setConsoleOutput((s) => s + `Open file error: ${String(err)}\n`);
+  } finally {
+    e.target.value = ""; // allows selecting same file again
+  }
+}
+
   function refreshRegistersFromWasm(emu: EmulatorApi) {
     try {
       const fmt = (n: number | bigint) => {
@@ -406,7 +428,14 @@ export default function App() {
         <div className="brand">ASU</div>
         <div className="title">Online Assembly x86 Emulator</div>
         <div className="toolbar">
-          <button>Open</button>
+          <button onClick={onOpenFileClick}>Open</button>
+          <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt"
+          onChange={onFileSelected}
+          style={{ display: "none" }}
+        />
           <button>Save</button>
           <button>Save as</button>
           <button onClick={onRun} className="primary">Run</button>

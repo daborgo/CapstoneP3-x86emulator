@@ -170,3 +170,4 @@ Cargo.lock
 .metadata/
 .idea/
 .vscode/
+core/target/.rustc_info.json
