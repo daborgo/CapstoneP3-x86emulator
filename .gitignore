@@ -115,10 +115,10 @@ debug/
 release/
 
 # WASM build artifacts
-*.wasm
-*.js.map
-*.wasm.map
-.vuepress/dist
+# *.wasm
+# *.js.map
+# *.wasm.map
+# .vuepress/dist
 
 # vuepress v2.x temp and cache directory
 .temp
