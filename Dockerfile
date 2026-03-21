@@ -13,9 +13,13 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+
+# Install Rust and set PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
 # Install wasm-pack
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Stage 2: Node.js development environment
 FROM node:20-slim as node-base
@@ -33,10 +37,12 @@ RUN apt-get update && apt-get install -y \
 FROM node-base as development
 
 # Copy Rust toolchain from rust-base
-COPY --from=rust-base /root/.rustup /root/.rustup
-COPY --from=rust-base /root/.cargo /root/.cargo
+# COPY --from=rust-base /root/.rustup /root/.rustup
+# COPY --from=rust-base /root/.cargo /root/.cargo
 
-# Set up environment variables
+
+# Install Rust and set up environment variables
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 ENV RUSTUP_HOME="/root/.rustup"
 ENV CARGO_HOME="/root/.cargo"
@@ -50,10 +56,11 @@ RUN npm install -g pnpm@latest
 # Create app directory
 WORKDIR /app
 
+
 # Copy package files
 COPY package*.json ./
 COPY frontend/package*.json ./frontend/
-COPY core/Cargo.toml ./core/
+COPY core ./core
 
 # Install root dependencies
 RUN npm install
@@ -102,9 +109,12 @@ RUN apk add --no-cache \
     python3 \
     make
 
-# Install Rust and wasm-pack
+
+# Install Rust and set PATH
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install wasm-pack
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
 # Set working directory

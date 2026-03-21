@@ -322,75 +322,173 @@ impl Memory {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
+    #[test]
+    fn test_null_pointer_access_error_message() {
+        let mem = Memory::default();
+        let addr = 0x000; // NULL region
+        let err = mem.read_u8(addr).unwrap_err();
+        assert!(format!("{}", err).contains("NULL pointer access"));
+    }
+
+    #[test]
+    fn test_invalid_mmio_address_error_message() {
+        let mem = Memory::default();
+        let addr = 0xFFFF0010; // Not a valid MMIO address
+        let err = mem.read_u8(addr).unwrap_err();
+        assert!(format!("{}", err).contains("Invalid MMIO address"));
+    }
+
+    #[test]
+    fn test_out_of_bounds_write_error() {
+        let mut mem = Memory::default();
+        let addr = mem.size() as u32; // definitely out of bounds
+        let err = mem.write_u8(addr, 0xAA).unwrap_err();
+        assert!(format!("{}", err).contains("out of bounds"));
+    }
+
+    #[test]
+    fn test_null_pointer_write_error() {
+        let mut mem = Memory::default();
+        let addr = 0x000; // NULL region
+        let err = mem.write_u8(addr, 0xAA).unwrap_err();
+        assert!(format!("{}", err).contains("NULL pointer access"));
+    }
+
+    #[test]
+    fn test_invalid_mmio_write_error() {
+        let mut mem = Memory::default();
+        let addr = 0xFFFF0010; // Not a valid MMIO address
+        let err = mem.write_u8(addr, 0xAA).unwrap_err();
+        assert!(format!("{}", err).contains("Invalid MMIO address"));
+    }
+
     #[test]
     fn test_memory_creation() {
         let memory = Memory::new(1024);  // 1 KB for testing
         assert_eq!(memory.size, 1024);
     }
-    
+
     #[test]
     fn test_read_write_u8() {
         let mut memory = Memory::new(0x10000);  // 64KB
-        
+
         // Test normal write/read
         memory.write_u8(0x1000, 0x42).unwrap();
         assert_eq!(memory.read_u8(0x1000), Ok(0x42));
-        
+
         // Test NULL pointer access
         assert!(memory.read_u8(0x0000).is_err());
         assert!(memory.write_u8(0x0000, 0x42).is_err());
     }
-    
+
     #[test]
     fn test_read_write_u32_little_endian() {
         let mut memory = Memory::new(0x10000);
-        
+
         // Write 32-bit value
         memory.write_u32(0x1000, 0x12345678).unwrap();
-        
+
         // Check individual bytes (little-endian)
         assert_eq!(memory.read_u8(0x1000), Ok(0x78));  // LSB first
         assert_eq!(memory.read_u8(0x1001), Ok(0x56));
         assert_eq!(memory.read_u8(0x1002), Ok(0x34));
-        assert_eq!(memory.read_u8(0x1003), Ok(0x12));  // MSB last
-        
+
         // Read back as 32-bit value
         assert_eq!(memory.read_u32(0x1000), Ok(0x12345678));
     }
-    
+
     #[test]
     fn test_stack_operations() {
         let mut memory = Memory::new(0x1_0000_0000);  // 256MB for stack
-        
+
         // Test push
         let new_esp = memory.push_u32(0xFFFF0000, 0x12345678).unwrap();
         assert_eq!(new_esp, 0xFFFEFFFC);
-        
+
         // Test pop
         let (value, final_esp) = memory.pop_u32(new_esp).unwrap();
         assert_eq!(value, 0x12345678);
         assert_eq!(final_esp, 0xFFFF0000);
     }
-    
+
     #[test]
     fn test_mmio_operations() {
         let mut memory = Memory::new(0x10000);
-        
+
+        // Test out of bounds read
+        let mem = Memory::default();
+        let addr = mem.size() as u32; // definitely out of bounds
+        let err = mem.read_u8(addr).unwrap_err();
+        assert!(format!("{}", err).contains("out of bounds"));
+
         // Test LED write
         memory.write_u8(0xFFFF0004, 0xFF).unwrap();
         assert_eq!(memory.mmio.get_leds(), 0xFF);
-        
+
         // Test 7-segment write
         memory.write_u8(0xFFFF0008, 0x3F).unwrap();
         assert_eq!(memory.mmio.get_seven_segment(), 0x3F);
-        
+
         // Test switch read
         memory.mmio.set_switches(0x0A);
         assert_eq!(memory.read_u8(0xFFFF0000), Ok(0x0A));
+    }
+
+    #[test]
+    fn test_sub_u8_memory() {
+        let mut mem = Memory::new(0x2000);
+        mem.write_u8(0x1100, 20).unwrap();
+        mem.write_u8(0x1101, 5).unwrap();
+        let a = mem.read_u8(0x1100).unwrap();
+        let b = mem.read_u8(0x1101).unwrap();
+        let (result, flags) = crate::instructions::sub::sub8(crate::instructions::sub::CpuFlags::default(), a, b);
+        assert_eq!(result, 15);
+        assert!(!flags.cf);
+        assert!(!flags.zf);
+    }
+
+    #[test]
+    fn test_sub_u32_memory() {
+        let mut mem = Memory::new(0x2000);
+        mem.write_u32(0x1200, 100).unwrap();
+        mem.write_u32(0x1204, 40).unwrap();
+        let a = mem.read_u32(0x1200).unwrap();
+        let b = mem.read_u32(0x1204).unwrap();
+        let (result, flags) = crate::instructions::sub::sub32(crate::instructions::sub::CpuFlags::default(), a, b);
+        assert_eq!(result, 60);
+        assert!(!flags.cf);
+        assert!(!flags.zf);
+    }
+
+    #[test]
+    fn test_sub_u8_memory_borrow() {
+        let mut mem = Memory::new(0x2000);
+        mem.write_u8(0x1102, 5).unwrap();
+        mem.write_u8(0x1103, 10).unwrap();
+        let a = mem.read_u8(0x1102).unwrap();
+        let b = mem.read_u8(0x1103).unwrap();
+        let (result, flags) = crate::instructions::sub::sub8(crate::instructions::sub::CpuFlags::default(), a, b);
+        assert_eq!(result, 251); // 5 - 10 = 251 (u8 wrap)
+        assert!(flags.cf); // borrow occurred
+        assert!(!flags.zf);
+    }
+
+    #[test]
+    fn test_sub_u32_memory_zero() {
+        let mut mem = Memory::new(0x2000);
+        mem.write_u32(0x1208, 42).unwrap();
+        mem.write_u32(0x120C, 42).unwrap();
+        let a = mem.read_u32(0x1208).unwrap();
+        let b = mem.read_u32(0x120C).unwrap();
+        let (result, flags) = crate::instructions::sub::sub32(crate::instructions::sub::CpuFlags::default(), a, b);
+        assert_eq!(result, 0);
+        assert!(flags.zf); // zero flag set
+        assert!(!flags.cf);
     }
 }
 

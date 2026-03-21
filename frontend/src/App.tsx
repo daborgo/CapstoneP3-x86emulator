@@ -1,21 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
-
-// Types for the generated WASM bindings
-type WasmModule = typeof import('./wasm/pkg/web_x86_core')
-type EmulatorApi = import('./wasm/pkg/web_x86_core').Emulator
-
-const SAMPLE_CODE = `; Demo: MOV, PUSH, POP, SUB, and ADD
-MOV EAX, 0x100
-MOV EBX, 0x50
-ADD EAX, EBX
-SUB EAX, 0x30
-PUSH EAX
-POP ECX
-; After Run, check:
-; - EAX = 0x00000120 (0x100 + 0x50 - 0x30)
-; - ECX = 0x00000120 (popped from stack)
-; - EBX = 0x00000050 (unchanged)`
+import Sidebar from './Sidebar'
+import LabPage from './LabPage'
 
 export default function App() {
   const [code, setCode] = useState(SAMPLE_CODE)
@@ -442,70 +428,7 @@ async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
           <button onClick={onStep}>Step</button>
           <button onClick={onReset}>Reset</button>
         </div>
-      </header>
-
-      <main className="main-grid">
-        <section className="editor-pane">
-          <div className="editor-header">Assembly Editor</div>
-          <textarea
-            className="editor"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            spellCheck={false}
-            aria-label="Assembly editor"
-          />
-        </section>
-
-        <aside className="sidebar">
-          <p>Steps: {steps}</p>
-          <div className="panel-heading">Registers</div>
-          <div className="registers">
-            <div className="reg-row"><span className="reg-name">EIP</span><span className="reg-val">{registers.eip}</span></div>
-            <div className="reg-row"><span className="reg-name">EAX</span><span className="reg-val">{registers.eax}</span></div>
-            <div className="reg-row"><span className="reg-name">EBX</span><span className="reg-val">{registers.ebx}</span></div>
-            <div className="reg-row"><span className="reg-name">ECX</span><span className="reg-val">{registers.ecx}</span></div>
-            <div className="reg-row"><span className="reg-name">EDX</span><span className="reg-val">{registers.edx}</span></div>
-            <div className="reg-row"><span className="reg-name">EBP</span><span className="reg-val">{registers.ebp}</span></div>
-            <div className="reg-row"><span className="reg-name">ESP</span><span className="reg-val">{registers.esp}</span></div>
-            <div className="reg-row"><span className="reg-name">ESI</span><span className="reg-val">{registers.esi}</span></div>
-            <div className="reg-row"><span className="reg-name">EDI</span><span className="reg-val">{registers.edi}</span></div>
-          </div>
-
-          <div className="panel-heading" style={{ marginTop: 12 }}>Flags</div>
-          <div className="registers">
-            <div className="reg-row"><span className="reg-name">ZF</span><span className="reg-val">{flags.zf}</span></div>
-            <div className="reg-row"><span className="reg-name">SF</span><span className="reg-val">{flags.sf}</span></div>
-            <div className="reg-row"><span className="reg-name">0F</span><span className="reg-val">{flags.of}</span></div>
-            <div className="reg-row"><span className="reg-name">CF</span><span className="reg-val">{flags.cf}</span></div>
-            <div className="reg-row"><span className="reg-name">DF</span><span className="reg-val">{flags.df}</span></div>
-            <div className="reg-row"><span className="reg-name">PF</span><span className="reg-val">{flags.pf}</span></div>
-          </div>
-
-          <div className="panel-heading" style={{ marginTop: 12 }}>Memory</div>
-          <div className="memory-grid" role="grid" aria-label="Memory view" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6 }}>
-            {memoryView.map((b, i) => {
-              const hex = b.toString(16).toUpperCase().padStart(1, '0')
-              return (
-                <div key={i} className="mem-cell" role="gridcell" aria-label={`Byte ${i}`} style={{
-                  border: '1px solid #ddd',
-                  borderRadius: 6,
-                  padding: '6px 8px',
-                  textAlign: 'center',
-                  fontFamily: 'monospace',
-                  background: '#fff'
-                }}>
-                  {hex}
-                </div>
-              )
-            })}
-          </div>
-        </aside>
-
-        <section className="console-pane">
-          <div className="console-header">Console</div>
-          <pre className="console-output" role="log" aria-live="polite">{consoleOutput}</pre>
-        </section>
-      </main>
-    </div>
+      </div>
+    </BrowserRouter>
   )
 }
