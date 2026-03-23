@@ -34,6 +34,7 @@ const DEFAULT_REGISTERS: RegistersState = {
 }
 
 export default function App() {
+//zoom feature
   const EDITOR_BASE_FONT_SIZE = 13
   const MIN_EDITOR_ZOOM = 10
   const MAX_EDITOR_ZOOM = 300
@@ -47,6 +48,7 @@ export default function App() {
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
   const LOAD_ADDR = 0x00001000
+
   const editorFontSize = Math.round((EDITOR_BASE_FONT_SIZE * editorZoom) / 100)
   const zoomInEditor = () => {
     setEditorZoom((z) => Math.min(MAX_EDITOR_ZOOM, z + EDITOR_ZOOM_STEP))
@@ -54,7 +56,6 @@ export default function App() {
   const zoomOutEditor = () => {
     setEditorZoom((z) => Math.max(MIN_EDITOR_ZOOM, z - EDITOR_ZOOM_STEP))
   }
-
   // placeholder registers
   const [registers, setRegisters] = useState<RegistersState>({ ...DEFAULT_REGISTERS })
   const lastValidRegistersRef = useRef<RegistersState>({ ...DEFAULT_REGISTERS })
@@ -173,7 +174,6 @@ export default function App() {
   // - PUSH <REG>           (encodes 50..57)
   // - POP <REG>            (encodes 58..5F)
   // - ADD <REG>, <REG|IMM32> (01/81 /0)
-  // - AND <REG>, <REG|IMM32> (21/81 /4)
   // - SUB <REG>, <REG|IMM32> (29/81 /5)
   // - CMP <REG>, <REG|IMM32> (3B/81 /7)
   // - JMP <REL|LABEL>      (EB rel8 if -128..127 else E9 rel32)
@@ -243,7 +243,7 @@ export default function App() {
         return parts.length === 2 ? 1 : 0
       }
 
-      if (op === 'ADD' || op === 'AND' || op === 'SUB' || op === 'CMP') {
+      if (op === 'ADD' || op === 'SUB' || op === 'CMP') {
         if (parts.length !== 3 || regIndex(parts[1]) < 0) return 0
         return regIndex(parts[2]) >= 0 ? 2 : 6
       }
@@ -451,38 +451,6 @@ export default function App() {
           const modrm = 0xC0 | dstIdx
           out.push(0x81, modrm, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
         }
-      } else if (op === 'AND') {
-        if (parts.length !== 3) {
-          errors.push(`Line ${i + 1}: AND expects 2 operands`)
-          continue
-        }
-        const dst = parts[1].toUpperCase()
-        const dstIdx = regIndex(dst)
-        if (dstIdx < 0) {
-          errors.push(`Line ${i + 1}: Unsupported destination register '${dst}'`)
-          continue
-        }
-
-        // Check if source is register or immediate
-        const srcReg = parts[2].toUpperCase()
-        const srcIdx = regIndex(srcReg)
-
-        if (srcIdx >= 0) {
-          // AND reg, reg: opcode 0x21 + ModR/M byte
-          // ModR/M: 11 src dst (both in register mode)
-          const modrm = 0xC0 | (srcIdx << 3) | dstIdx
-          out.push(0x21, modrm)
-        } else {
-          // AND reg, imm: opcode 0x81 + ModR/M byte (reg field = 4 for AND) + imm32
-          const imm = toNum(parts[2])
-          if (imm == null) {
-            errors.push(`Line ${i + 1}: Expected register or immediate (hex like 0x123 or decimal)`)
-            continue
-          }
-          // ModR/M: 11 100 dst (register mode, AND opcode extension /4)
-          const modrm = 0xE0 | dstIdx
-          out.push(0x81, modrm, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
-        }
       } else if (op === 'CMP') {
         if (parts.length !== 3) {
           errors.push(`Line ${i + 1}: CMP expects 2 operands`)
@@ -678,7 +646,7 @@ export default function App() {
 
       <main className="main-grid">
         <section className="editor-pane">
-          <div className="editor-header">
+        <div className="editor-header">
             <span>Assembly Editor</span>
             <div className="editor-zoom-controls" role="group" aria-label="Assembly editor zoom controls">
               <button
