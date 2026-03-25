@@ -59,6 +59,7 @@ export default function App() {
   // placeholder registers
   const [registers, setRegisters] = useState<RegistersState>({ ...DEFAULT_REGISTERS })
   const lastValidRegistersRef = useRef<RegistersState>({ ...DEFAULT_REGISTERS })
+  const warnedUnsupportedRegsRef = useRef<Set<RegisterKey>>(new Set())
 
   // placeholder flags
   const [flags, setFlags] = useState({
@@ -99,19 +100,12 @@ export default function App() {
     return `0x${(val >>> 0).toString(16).padStart(8, '0')}`
   }
 
-  const setEmuRegister = (emu: EmulatorApi, reg: RegisterKey, value: number) => {
-    switch (reg) {
-      case 'eip': emu.set_eip(value); break
-      case 'eax': emu.set_eax(value); break
-      case 'ebx': emu.set_ebx(value); break
-      case 'ecx': emu.set_ecx(value); break
-      case 'edx': emu.set_edx(value); break
-      case 'ebp': emu.set_ebp(value); break
-      case 'esp': emu.set_esp(value); break
-      case 'esi': emu.set_esi(value); break
-      case 'edi': emu.set_edi(value); break
-      default: break
+  const setEmuRegister = (emu: EmulatorApi, reg: RegisterKey, value: number): boolean => {
+    if (reg === 'eax') {
+      emu.set_eax(value)
+      return true
     }
+    return false
   }
 
   const applyRegistersToEmu = (emu: EmulatorApi, regs: RegistersState) => {
@@ -135,7 +129,11 @@ export default function App() {
 
     const emu = wasmEmuRef.current
     if (emu) {
-      setEmuRegister(emu, reg, parsed)
+      const didSet = setEmuRegister(emu, reg, parsed)
+      if (!didSet && !warnedUnsupportedRegsRef.current.has(reg)) {
+        warnedUnsupportedRegsRef.current.add(reg)
+        setConsoleOutput((s) => s + `Note: ${reg.toUpperCase()} cannot be pushed to emulator yet; backend currently exposes set_eax only.\n`)
+      }
     }
   }
 
