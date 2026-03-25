@@ -116,32 +116,120 @@ function encodeRmMem(mem: MemOperand, regField: number): number[] {
 
 // ─── Assembler ─────────────────────────────────────────────────────────────────
 
+// Conditional jump opcode map
+const JCC_OPCODES: Record<string, number> = {
+  JE: 0x74, JZ: 0x74, JNE: 0x75, JNZ: 0x75,
+  JL: 0x7C, JNGE: 0x7C, JGE: 0x7D, JNL: 0x7D,
+  JLE: 0x7E, JNG: 0x7E, JG: 0x7F, JNLE: 0x7F,
+}
+
+// Tokenize a line: strip comments, split tokens preserving [..] brackets
+function tokenizeLine(raw: string): { tokens: string[]; label: string | null } {
+  const line = raw.split(';')[0].trim()
+  if (!line) return { tokens: [], label: null }
+  if (/^(section|db|dw|dd)\b/i.test(line)) return { tokens: [], label: null }
+
+  // Check for label (word followed by colon)
+  let rest = line
+  let label: string | null = null
+  const labelMatch = line.match(/^(\w+)\s*:\s*(.*)$/)
+  if (labelMatch) {
+    label = labelMatch[1].toUpperCase()
+    rest = labelMatch[2].trim()
+  }
+  if (!rest) return { tokens: [], label }
+
+  const tokens: string[] = []
+  let cur = ''
+  let inBracket = false
+  for (const ch of rest.replace(/\s*,\s*/g, ',').replace(/\s+/g, ' ')) {
+    if (ch === '[') { inBracket = true; cur += ch }
+    else if (ch === ']') { inBracket = false; cur += ch }
+    else if ((ch === ' ' || ch === ',') && !inBracket) {
+      if (cur) { tokens.push(cur); cur = '' }
+    } else { cur += ch }
+  }
+  if (cur) tokens.push(cur)
+  return { tokens, label }
+}
+
+// Calculate the byte size of an instruction (without emitting bytes)
+function instrSize(op: string, tokens: string[]): number {
+  if (op === 'MOV') {
+    const dst = tokens[1], src2 = tokens[2]
+    const dstMem = parseMemOperand(dst)
+    const srcMem = parseMemOperand(src2)
+    if (!dstMem && !srcMem) {
+      if (regIndex(src2) >= 0) return 2                // MOV reg, reg
+      return 5                                          // MOV reg, imm32
+    }
+    if (srcMem || dstMem) {
+      const mem = srcMem || dstMem
+      if (!mem) return 2
+      if (mem.type === 'abs') return 6                  // opcode + modrm + disp32
+      if (mem.type === 'reg') return mem.reg === 5 ? 3 : 2
+      // reg_disp
+      const disp = (mem as MemRegDisp).disp
+      return (disp >= -128 && disp <= 127) ? 3 : 6
+    }
+    return 2
+  }
+  if (op === 'PUSH' || op === 'POP') return 1
+  if (op === 'ADD' || op === 'SUB' || op === 'CMP') {
+    if (regIndex(tokens[2]) >= 0) return 2              // reg, reg
+    return 6                                            // reg, imm32 (0x81 form)
+  }
+  if (op === 'AND' || op === 'OR') {
+    if (regIndex(tokens[2]) >= 0) return 2
+    return 6
+  }
+  if (op === 'SHL' || op === 'SAL' || op === 'SHR' || op === 'SAR') return 3
+  if (op === 'MUL' || op === 'IDIV') return 2
+  if (op === 'IMUL') return 3                            // 0x0F 0xAF + ModRM
+  if (op === 'CDQ' || op === 'RET') return 1
+  if (op === 'JMP') return 2                            // always use short form for labels; will expand if needed
+  if (op in JCC_OPCODES) return 2                       // conditional jumps are always rel8
+  if (op === 'CALL') return 5
+  return 0
+}
+
 export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
-  const out: number[] = []
   const errors: string[] = []
   const lines = src.split('\n')
 
+  // ── Pass 1: collect labels and instruction offsets ──────────────────────────
+  interface ParsedLine { lineNum: number; tokens: string[]; label: string | null; op: string }
+  const parsed: ParsedLine[] = []
+  const labels = new Map<string, number>()   // label name → byte offset
+  let offset = 0
+
   for (let i = 0; i < lines.length; i++) {
     const lineNum = i + 1
-    const line = lines[i].split(';')[0].trim()
-    if (!line) continue
-    if (/^(section|db|dw|dd)\b/i.test(line)) continue
+    const { tokens, label } = tokenizeLine(lines[i])
 
-    // Split into tokens, preserving [..] as one token
-    const tokens: string[] = []
-    let cur = ''
-    let inBracket = false
-    for (const ch of line.replace(/\s*,\s*/g, ',').replace(/\s+/g, ' ')) {
-      if (ch === '[') { inBracket = true; cur += ch }
-      else if (ch === ']') { inBracket = false; cur += ch }
-      else if ((ch === ' ' || ch === ',') && !inBracket) {
-        if (cur) { tokens.push(cur); cur = '' }
-      } else { cur += ch }
+    if (label) {
+      if (labels.has(label)) {
+        errors.push(`Line ${lineNum}: Duplicate label '${label}'`)
+      } else {
+        labels.set(label, offset)
+      }
     }
-    if (cur) tokens.push(cur)
-    if (!tokens.length) continue
 
+    if (!tokens.length) continue
     const op = tokens[0].toUpperCase()
+    const size = instrSize(op, tokens)
+    if (size === 0 && op !== 'CDQ' && op !== 'RET') {
+      // Unknown mnemonic – will be caught in pass 2
+    }
+    parsed.push({ lineNum, tokens, label: null, op })
+    offset += size || 1 // fallback 1 to keep offsets moving for unknown ops
+  }
+
+  // ── Pass 2: emit bytes ─────────────────────────────────────────────────────
+  const out: number[] = []
+
+  for (const { lineNum, tokens, op } of parsed) {
+    const currentOffset = out.length
 
     // ── MOV ──────────────────────────────────────────────────────────────────
     if (op === 'MOV') {
@@ -153,19 +241,15 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
       const srcIdx = regIndex(src2)
 
       if (!dstMem && !srcMem) {
-        // MOV reg, reg/imm  (existing)
         if (dstIdx < 0) { errors.push(`Line ${lineNum}: Unknown register '${dst}'`); continue }
         if (srcIdx >= 0) {
-          // MOV r32, r32: 0x8B mod=11
-          const modrm = 0xC0 | (dstIdx << 3) | srcIdx
-          out.push(0x8B, modrm)
+          out.push(0x8B, 0xC0 | (dstIdx << 3) | srcIdx)
         } else {
           const imm = toNum(src2)
           if (imm == null) { errors.push(`Line ${lineNum}: Expected register or immediate`); continue }
           out.push(0xB8 + dstIdx, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
         }
       } else if (!dstMem && srcMem) {
-        // MOV reg, [mem]  → 0x8B
         if (dstIdx < 0) { errors.push(`Line ${lineNum}: Unknown register '${dst}'`); continue }
         if (srcMem.type === 'reg' && srcMem.reg === 4) {
           errors.push(`Line ${lineNum}: [ESP] addressing requires SIB byte (not supported)`); continue
@@ -174,7 +258,6 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
         if (!rmBytes.length) { errors.push(`Line ${lineNum}: Unsupported memory addressing`); continue }
         out.push(0x8B, ...rmBytes)
       } else if (dstMem && !srcMem) {
-        // MOV [mem], reg  → 0x89
         if (srcIdx < 0) { errors.push(`Line ${lineNum}: Expected register source for memory store`); continue }
         if (dstMem.type === 'reg' && dstMem.reg === 4) {
           errors.push(`Line ${lineNum}: [ESP] addressing requires SIB byte (not supported)`); continue
@@ -228,6 +311,22 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
         out.push(0x81, 0xE8 | dstIdx, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
       }
 
+    // ── CMP ──────────────────────────────────────────────────────────────────
+    } else if (op === 'CMP') {
+      if (tokens.length !== 3) { errors.push(`Line ${lineNum}: CMP expects 2 operands`); continue }
+      const dstIdx = regIndex(tokens[1])
+      if (dstIdx < 0) { errors.push(`Line ${lineNum}: Unknown register '${tokens[1]}'`); continue }
+      const srcIdx = regIndex(tokens[2])
+      if (srcIdx >= 0) {
+        // CMP r/m32, r32: 0x39
+        out.push(0x39, 0xC0 | (srcIdx << 3) | dstIdx)
+      } else {
+        const imm = toNum(tokens[2])
+        if (imm == null) { errors.push(`Line ${lineNum}: Expected register or immediate`); continue }
+        // CMP r/m32, imm32: 0x81 /7
+        out.push(0x81, 0xC0 | (7 << 3) | dstIdx, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
+      }
+
     // ── AND ──────────────────────────────────────────────────────────────────
     } else if (op === 'AND') {
       if (tokens.length !== 3) { errors.push(`Line ${lineNum}: AND expects 2 operands`); continue }
@@ -235,12 +334,10 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
       if (dstIdx < 0) { errors.push(`Line ${lineNum}: Unknown register '${tokens[1]}'`); continue }
       const srcIdx = regIndex(tokens[2])
       if (srcIdx >= 0) {
-        // AND r/m32, r32: 0x21, reg=src, rm=dst
         out.push(0x21, 0xC0 | (srcIdx << 3) | dstIdx)
       } else {
         const imm = toNum(tokens[2])
         if (imm == null) { errors.push(`Line ${lineNum}: Expected register or immediate`); continue }
-        // AND r/m32, imm32: 0x81 /4
         out.push(0x81, 0xC0 | (4 << 3) | dstIdx, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
       }
 
@@ -251,12 +348,10 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
       if (dstIdx < 0) { errors.push(`Line ${lineNum}: Unknown register '${tokens[1]}'`); continue }
       const srcIdx = regIndex(tokens[2])
       if (srcIdx >= 0) {
-        // OR r/m32, r32: 0x09, reg=src, rm=dst
         out.push(0x09, 0xC0 | (srcIdx << 3) | dstIdx)
       } else {
         const imm = toNum(tokens[2])
         if (imm == null) { errors.push(`Line ${lineNum}: Expected register or immediate`); continue }
-        // OR r/m32, imm32: 0x81 /1
         out.push(0x81, 0xC0 | (1 << 3) | dstIdx, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
       }
 
@@ -267,7 +362,6 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
       if (dstIdx < 0) { errors.push(`Line ${lineNum}: Unknown register '${tokens[1]}'`); continue }
       const count = toNum(tokens[2])
       if (count == null) { errors.push(`Line ${lineNum}: Expected immediate count`); continue }
-      // SHL r/m32, imm8: 0xC1 /4
       out.push(0xC1, 0xC0 | (4 << 3) | dstIdx, count & 0xFF)
 
     // ── SHR ──────────────────────────────────────────────────────────────────
@@ -277,7 +371,6 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
       if (dstIdx < 0) { errors.push(`Line ${lineNum}: Unknown register '${tokens[1]}'`); continue }
       const count = toNum(tokens[2])
       if (count == null) { errors.push(`Line ${lineNum}: Expected immediate count`); continue }
-      // SHR r/m32, imm8: 0xC1 /5
       out.push(0xC1, 0xC0 | (5 << 3) | dstIdx, count & 0xFF)
 
     // ── SAR ──────────────────────────────────────────────────────────────────
@@ -287,7 +380,6 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
       if (dstIdx < 0) { errors.push(`Line ${lineNum}: Unknown register '${tokens[1]}'`); continue }
       const count = toNum(tokens[2])
       if (count == null) { errors.push(`Line ${lineNum}: Expected immediate count`); continue }
-      // SAR r/m32, imm8: 0xC1 /7
       out.push(0xC1, 0xC0 | (7 << 3) | dstIdx, count & 0xFF)
 
     // ── MUL ──────────────────────────────────────────────────────────────────
@@ -295,7 +387,6 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
       if (tokens.length !== 2) { errors.push(`Line ${lineNum}: MUL expects 1 register operand`); continue }
       const srcIdx = regIndex(tokens[1])
       if (srcIdx < 0) { errors.push(`Line ${lineNum}: Unknown register '${tokens[1]}'`); continue }
-      // MUL r/m32: 0xF7 /4
       out.push(0xF7, 0xC0 | (4 << 3) | srcIdx)
 
     // ── IDIV ─────────────────────────────────────────────────────────────────
@@ -303,8 +394,16 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
       if (tokens.length !== 2) { errors.push(`Line ${lineNum}: IDIV expects 1 register operand`); continue }
       const srcIdx = regIndex(tokens[1])
       if (srcIdx < 0) { errors.push(`Line ${lineNum}: Unknown register '${tokens[1]}'`); continue }
-      // IDIV r/m32: 0xF7 /7
       out.push(0xF7, 0xC0 | (7 << 3) | srcIdx)
+
+    // ── IMUL (two-operand: IMUL reg, reg) ────────────────────────────────────
+    } else if (op === 'IMUL') {
+      if (tokens.length !== 3) { errors.push(`Line ${lineNum}: IMUL expects 2 register operands`); continue }
+      const dstIdx = regIndex(tokens[1])
+      const srcIdx2 = regIndex(tokens[2])
+      if (dstIdx < 0) { errors.push(`Line ${lineNum}: Unknown register '${tokens[1]}'`); continue }
+      if (srcIdx2 < 0) { errors.push(`Line ${lineNum}: Unknown register '${tokens[2]}'`); continue }
+      out.push(0x0F, 0xAF, 0xC0 | (dstIdx << 3) | srcIdx2)
 
     // ── CDQ ──────────────────────────────────────────────────────────────────
     } else if (op === 'CDQ') {
@@ -313,13 +412,65 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
     // ── JMP ──────────────────────────────────────────────────────────────────
     } else if (op === 'JMP') {
       if (tokens.length !== 2) { errors.push(`Line ${lineNum}: JMP expects 1 operand`); continue }
-      const rel = toNum(tokens[1])
-      if (rel == null) { errors.push(`Line ${lineNum}: JMP displacement must be a number`); continue }
-      const relS = rel | 0  // treat as signed
-      if (relS >= -128 && relS <= 127) {
-        out.push(0xEB, relS & 0xFF)
+      const target = tokens[1].toUpperCase()
+      const labelAddr = labels.get(target)
+      if (labelAddr !== undefined) {
+        // Label target: compute relative displacement (rel8 from end of 2-byte instruction)
+        const instrEnd = currentOffset + 2
+        const rel = labelAddr - instrEnd
+        if (rel < -128 || rel > 127) {
+          errors.push(`Line ${lineNum}: JMP target '${target}' is too far for rel8 (${rel})`); continue
+        }
+        out.push(0xEB, rel & 0xFF)
       } else {
-        out.push(0xE9, rel & 0xFF, (rel >>> 8) & 0xFF, (rel >>> 16) & 0xFF, (rel >>> 24) & 0xFF)
+        const rel = toNum(tokens[1])
+        if (rel == null) { errors.push(`Line ${lineNum}: Unknown label or invalid displacement '${tokens[1]}'`); continue }
+        const relS = rel | 0
+        if (relS >= -128 && relS <= 127) {
+          out.push(0xEB, relS & 0xFF)
+        } else {
+          out.push(0xE9, rel & 0xFF, (rel >>> 8) & 0xFF, (rel >>> 16) & 0xFF, (rel >>> 24) & 0xFF)
+        }
+      }
+
+    // ── Conditional Jumps (JE, JNE, JL, JGE, JLE, JG, etc.) ─────────────────
+    } else if (op in JCC_OPCODES) {
+      if (tokens.length !== 2) { errors.push(`Line ${lineNum}: ${op} expects 1 operand`); continue }
+      const jccOpcode = JCC_OPCODES[op]
+      const target = tokens[1].toUpperCase()
+      const labelAddr = labels.get(target)
+      if (labelAddr !== undefined) {
+        const instrEnd = currentOffset + 2
+        const rel = labelAddr - instrEnd
+        if (rel < -128 || rel > 127) {
+          errors.push(`Line ${lineNum}: ${op} target '${target}' is too far for rel8 (${rel})`); continue
+        }
+        out.push(jccOpcode, rel & 0xFF)
+      } else {
+        const rel = toNum(tokens[1])
+        if (rel == null) { errors.push(`Line ${lineNum}: Unknown label or invalid displacement '${tokens[1]}'`); continue }
+        const relS = rel | 0
+        if (relS < -128 || relS > 127) {
+          errors.push(`Line ${lineNum}: ${op} displacement out of rel8 range (${relS})`); continue
+        }
+        out.push(jccOpcode, relS & 0xFF)
+      }
+
+    // ── CALL ─────────────────────────────────────────────────────────────────
+    } else if (op === 'CALL') {
+      if (tokens.length !== 2) { errors.push(`Line ${lineNum}: CALL expects 1 operand`); continue }
+      const target = tokens[1].toUpperCase()
+      const labelAddr = labels.get(target)
+      if (labelAddr !== undefined) {
+        // Label target: compute rel32 displacement from end of 5-byte CALL instruction
+        const instrEnd = currentOffset + 5
+        const rel = labelAddr - instrEnd
+        const r = rel >>> 0
+        out.push(0xE8, r & 0xFF, (r >>> 8) & 0xFF, (r >>> 16) & 0xFF, (r >>> 24) & 0xFF)
+      } else {
+        const rel = toNum(tokens[1])
+        if (rel == null) { errors.push(`Line ${lineNum}: Unknown label or invalid displacement '${tokens[1]}'`); continue }
+        out.push(0xE8, rel & 0xFF, (rel >>> 8) & 0xFF, (rel >>> 16) & 0xFF, (rel >>> 24) & 0xFF)
       }
 
     // ── RET ──────────────────────────────────────────────────────────────────
@@ -358,8 +509,8 @@ export default function LabPage() {
     ebx: '0x00000000',
     ecx: '0x00000000',
     edx: '0x00000000',
-    ebp: '0xFFFF0000',
-    esp: '0xFFFF0000',
+    ebp: '0x00F00000',
+    esp: '0x00F00000',
     esi: '0x00000000',
     edi: '0x00000000',
   })
@@ -374,8 +525,8 @@ export default function LabPage() {
     setSteps(0)
     setRegisters({
       eip: '0x00001000', eax: '0x00000000', ebx: '0x00000000',
-      ecx: '0x00000000', edx: '0x00000000', ebp: '0xFFFF0000',
-      esp: '0xFFFF0000', esi: '0x00000000', edi: '0x00000000',
+      ecx: '0x00000000', edx: '0x00000000', ebp: '0x00F00000',
+      esp: '0x00F00000', esi: '0x00000000', edi: '0x00000000',
     })
     setFlags({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
     setMemoryView(Array(48).fill(0))
@@ -496,8 +647,8 @@ export default function LabPage() {
     setConsoleOutput('')
     setRegisters({
       eip: '0x00001000', eax: '0x00000000', ebx: '0x00000000',
-      ecx: '0x00000000', edx: '0x00000000', ebp: '0xFFFF0000',
-      esp: '0xFFFF0000', esi: '0x00000000', edi: '0x00000000',
+      ecx: '0x00000000', edx: '0x00000000', ebp: '0x00F00000',
+      esp: '0x00F00000', esi: '0x00000000', edi: '0x00000000',
     })
     setFlags({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
     setMemoryView(Array(48).fill(0))

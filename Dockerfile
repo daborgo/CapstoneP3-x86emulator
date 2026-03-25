@@ -92,7 +92,7 @@ echo "Starting Web x86 Emulator Development Environment"\n\
 echo "Building WASM module..."\n\
 cd core && wasm-pack build --target web --out-dir ../frontend/src/wasm/pkg\n\
 echo "Starting frontend development server..."\n\
-cd ../frontend && npm run dev\n\
+cd ../frontend && npm run dev -- --host\n\
 ' > /app/dev.sh && chmod +x /app/dev.sh
 
 # Default command

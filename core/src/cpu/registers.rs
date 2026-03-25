@@ -71,8 +71,8 @@ impl Registers {
 
             // Stack registers start at stack base
             // Stack grows downward from high addresses
-            ebp: 0xFFFF_0000, // Base pointer at stack base
-            esp: 0xFFFF_0000, // Stack pointer starts at top of stack
+            ebp: 0x00F0_0000, // Base pointer at stack base (within 16 MB RAM)
+            esp: 0x00F0_0000, // Stack pointer starts at top of stack
 
             // Instruction pointer starts in code section
             // Code section begins at 0x1000 (after NULL region)

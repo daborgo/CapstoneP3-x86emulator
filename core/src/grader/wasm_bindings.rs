@@ -5,6 +5,8 @@ use super::api;
 pub fn grade_lab(lab_id: u32, program: Vec<u8>) -> String {
     match lab_id {
         1 => api::grade_lab1(&program).to_json(),
+        2 => api::grade_lab2(&program).to_json(),
+        3 => api::grade_lab3(&program).to_json(),
         _ => {
             // Unknown lab — return empty result
             let result = api::GradingResult {

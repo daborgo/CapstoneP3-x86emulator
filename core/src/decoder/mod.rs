@@ -44,6 +44,14 @@ pub enum Opcode {
     SHL,
     SHR,
     SAR,
+    CMP,
+    IMUL,
+    JE,
+    JNE,
+    JL,
+    JGE,
+    JLE,
+    JG,
 }
 
 impl fmt::Display for Opcode {
@@ -65,6 +73,14 @@ impl fmt::Display for Opcode {
             Opcode::SHL  => write!(f, "SHL"),
             Opcode::SHR  => write!(f, "SHR"),
             Opcode::SAR  => write!(f, "SAR"),
+            Opcode::CMP  => write!(f, "CMP"),
+            Opcode::IMUL => write!(f, "IMUL"),
+            Opcode::JE   => write!(f, "JE"),
+            Opcode::JNE  => write!(f, "JNE"),
+            Opcode::JL   => write!(f, "JL"),
+            Opcode::JGE  => write!(f, "JGE"),
+            Opcode::JLE  => write!(f, "JLE"),
+            Opcode::JG   => write!(f, "JG"),
         }
     }
 }
@@ -178,6 +194,7 @@ fn decode_group1(bytes: &[u8]) -> Result<Instruction, DecodeError> {
         1 => Opcode::OR,
         4 => Opcode::AND,
         5 => Opcode::SUB,
+        7 => Opcode::CMP,
         _ => return Err(DecodeError::UnknownOpcode(opcode_byte)),
     };
 
@@ -341,9 +358,40 @@ fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0x00..=0x05 => Ok(Opcode::ADD),
         0x21 | 0x23 => Ok(Opcode::AND),
         0x09 | 0x0B => Ok(Opcode::OR),
+        0x38..=0x3D => Ok(Opcode::CMP),
+        0x74        => Ok(Opcode::JE),
+        0x75        => Ok(Opcode::JNE),
+        0x7C        => Ok(Opcode::JL),
+        0x7D        => Ok(Opcode::JGE),
+        0x7E        => Ok(Opcode::JLE),
+        0x7F        => Ok(Opcode::JG),
         0x99        => Ok(Opcode::CDQ),
         0xC3        => Ok(Opcode::RET),
         _           => Err(DecodeError::UnknownOpcode(opcode_byte)),
+    }
+}
+
+/// 0x0F prefix – two-byte opcodes
+fn decode_0f(bytes: &[u8]) -> Result<Instruction, DecodeError> {
+    if bytes.len() < 2 { return Err(DecodeError::InsufficientBytes); }
+    let second = bytes[1];
+    match second {
+        0xAF => {
+            // IMUL r32, r/m32: 0x0F 0xAF /r  (dest = dest * src, signed, 32-bit result)
+            if bytes.len() < 3 { return Err(DecodeError::InsufficientBytes); }
+            let modrm = bytes[2];
+            let mod_bits = modrm >> 6;
+            if mod_bits != 0b11 { return Err(DecodeError::InvalidFormat); } // only reg-reg for now
+            let dst_reg = reg_from_index((modrm >> 3) & 0x7);
+            let src_reg = reg_from_index(modrm & 0x7);
+            Ok(Instruction {
+                opcode: Opcode::IMUL,
+                dest: Some(Operand::Register(dst_reg)),
+                src: Some(Operand::Register(src_reg)),
+                length: 3,
+            })
+        }
+        _ => Err(DecodeError::UnknownOpcode(second)),
     }
 }
 
@@ -362,6 +410,7 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
         0xF7               => return decode_f7(bytes),
         0xC1               => return decode_c1(bytes),
         0x89 | 0x8B        => return decode_mov_rm(bytes),
+        0x0F               => return decode_0f(bytes),
         _                  => {}
     }
 
@@ -486,7 +535,36 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
         }
         Opcode::CDQ => Ok(Instruction { opcode, dest: None, src: None, length: 1 }),
         Opcode::RET => Ok(Instruction { opcode, dest: None, src: None, length: 1 }),
-        Opcode::MUL | Opcode::IDIV | Opcode::SHL | Opcode::SHR | Opcode::SAR => {
+        Opcode::CMP => {
+            // CMP r/m32, r32 (0x39) or CMP r32, r/m32 (0x3B)
+            if bytes.len() < 2 { return Err(DecodeError::InsufficientBytes); }
+            let modrm = bytes[1];
+            let mod_bits = modrm >> 6;
+            if mod_bits != 0b11 { return Err(DecodeError::InvalidFormat); }
+            let (dest_reg, src_reg) = if opcode_byte == 0x39 || opcode_byte == 0x38 {
+                (reg_from_index(modrm & 0x7), reg_from_index((modrm >> 3) & 0x7))
+            } else {
+                (reg_from_index((modrm >> 3) & 0x7), reg_from_index(modrm & 0x7))
+            };
+            Ok(Instruction {
+                opcode,
+                dest: Some(Operand::Register(dest_reg)),
+                src: Some(Operand::Register(src_reg)),
+                length: 2,
+            })
+        }
+        Opcode::JE | Opcode::JNE | Opcode::JL | Opcode::JGE | Opcode::JLE | Opcode::JG => {
+            // Conditional jumps: opcode + rel8
+            if bytes.len() < 2 { return Err(DecodeError::InsufficientBytes); }
+            let disp = bytes[1] as i8 as i32 as u32;
+            Ok(Instruction {
+                opcode,
+                dest: Some(Operand::Immediate(disp)),
+                src: None,
+                length: 2,
+            })
+        }
+        Opcode::MUL | Opcode::IDIV | Opcode::IMUL | Opcode::SHL | Opcode::SHR | Opcode::SAR => {
             Err(DecodeError::UnknownOpcode(opcode_byte))
         }
     }

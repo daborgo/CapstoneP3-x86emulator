@@ -91,6 +91,35 @@ pub fn execute_idiv(cpu: &mut CPU, memory: &mut Memory, instruction: &Instructio
     Ok(())
 }
 
+/// IMUL r32, r/m32: signed multiply dest = dest * src (32-bit result)
+pub fn execute_imul(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) -> Result<(), ExecutionError> {
+    let dst_reg = match instruction.dest {
+        Some(Operand::Register(r)) => r,
+        _ => return Err(ExecutionError::InvalidOperand),
+    };
+    let src_op = instruction.src.ok_or(ExecutionError::InvalidOperand)?;
+    let src: u32 = match src_op {
+        Operand::Register(r) => cpu.registers.get(r),
+        Operand::Memory(addr) => memory.read_u32(addr)?,
+        Operand::Immediate(_) => return Err(ExecutionError::InvalidOperand),
+    };
+
+    let dst_val = cpu.registers.get(dst_reg) as i32;
+    let src_val = src as i32;
+    let result64 = (dst_val as i64).wrapping_mul(src_val as i64);
+    let result32 = result64 as i32 as u32;
+
+    cpu.registers.set(dst_reg, result32);
+
+    // CF and OF set if sign-extended 32-bit result != full 64-bit result
+    let overflow = result64 != (result32 as i32 as i64);
+    cpu.flags.cf = overflow;
+    cpu.flags.of = overflow;
+
+    cpu.registers.advance_ip(instruction.length as u32);
+    Ok(())
+}
+
 /// CDQ: sign-extend EAX into EDX:EAX (convert doubleword to quadword)
 pub fn execute_cdq(cpu: &mut CPU, _memory: &mut Memory, instruction: &Instruction) -> Result<(), ExecutionError> {
     let sign_bit = (cpu.registers.eax & 0x8000_0000) != 0;

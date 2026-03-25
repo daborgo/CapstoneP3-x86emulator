@@ -62,32 +62,105 @@ MOV [EBX+20], EAX         ; A[5]
   },
   2: {
     id: 2,
-    title: 'Lab 2: Arithmetic (ADD & SUB)',
+    title: 'Lab 2: Loops (Conditional and Unconditional Branch Instructions)',
     description:
-      'Perform basic arithmetic operations using ADD and SUB instructions. ' +
-      'Observe how each operation affects the CPU flags (ZF, SF, CF, OF).',
-    starterCode: `; Lab 2: Arithmetic
-; Use ADD and SUB instructions as directed.
+      'Write an x86 program to remove all occurrences of a given element from an array.\n\n' +
+      'Memory layout:\n' +
+      '  [0x1F00] = n    (array length, update this after removal)\n' +
+      '  [0x1F04] = val  (value to remove)\n' +
+      '  Array A[] starts at address 0x2000 (each element is 4 bytes)\n\n' +
+      'C pseudocode:\n' +
+      '  int i = 0;\n' +
+      '  while (i < n) {\n' +
+      '    if (A[i] != val)\n' +
+      '      i++;\n' +
+      '    else {\n' +
+      '      for (int k = i; k < n - 1; k++)\n' +
+      '        A[k] = A[k+1];\n' +
+      '      n = n - 1;\n' +
+      '    }\n' +
+      '  }\n\n' +
+      'After execution, store the new n back to [0x1F00].\n' +
+      'Only the first n elements of the array will be checked.\n\n' +
+      'Grading: 4 automated tests (5 pts each) + 2 manual checks (5 pts each) = 30 pts.',
+    starterCode: `; Lab 2: Loops - Remove element from array
+; Memory layout:
+;   [0x1F00] = n   (array length)
+;   [0x1F04] = val (value to remove)
+;   Array A[] at 0x2000: A[0]=[0x2000], A[1]=[0x2004], ...
+;
+; TODO: Implement the removal loop
+;   1. Load n from [0x1F00], val from [0x1F04]
+;   2. Loop through array, remove all occurrences of val
+;      by shifting subsequent elements left
+;   3. Store updated n back to [0x1F00]
 
-MOV EAX, 0x0000000A
-MOV EBX, 0x00000005
-ADD EAX, EBX
-SUB EAX, 0x00000003
+; Load parameters
+MOV ECX, [0x1F00]         ; ECX = n (array length)
+MOV EDX, [0x1F04]         ; EDX = val (value to remove)
+MOV EBX, 0x00002000       ; EBX = base address of A[]
+
+; TODO: implement your removal loop here
+;   Use CMP, JE/JNE, JL/JGE for comparisons and branches
+;   Use JMP for unconditional jumps
+
+; When done, store the new n
+MOV [0x1F00], ECX         ; store updated n
 `,
   },
   3: {
     id: 3,
-    title: 'Lab 3: Stack (PUSH & POP)',
+    title: 'Lab 3: Single Procedure Call',
     description:
-      'Explore the x86 stack using PUSH and POP instructions. ' +
-      'Observe how ESP changes with each push and pop operation.',
-    starterCode: `; Lab 3: Stack Operations
-; Use PUSH and POP to manipulate the stack.
+      'Given an array A of at least one integer, create a new array B where B[i] = A[i]^i.\n\n' +
+      'Write two functions called from main using CALL:\n' +
+      '  - exponent(x, y): returns x raised to the power y (A[i]^i)\n' +
+      '  - append(B, n2, exp): stores exp at B[n2]\n\n' +
+      'Memory layout:\n' +
+      '  [0x1F00] = n1   (length of array A)\n' +
+      '  Array A[] starts at address 0x2000 (each element is 4 bytes)\n' +
+      '  Array B[] starts at address 0x3000 (output, each element is 4 bytes)\n' +
+      '  Store final n2 (length of B) at [0x1F04]\n\n' +
+      'Algorithm (C pseudocode):\n' +
+      '  B[0] = 1;  // A[0]^0 = 1\n' +
+      '  for (j = 1; j < n1; j++) {\n' +
+      '    n2 = j;\n' +
+      '    exp = exponent(A[j], j);\n' +
+      '    append(B, n2, exp);\n' +
+      '  }\n' +
+      '  n2++;\n\n' +
+      'Grading: 4 automated tests (5 pts each) + 2 manual checks (5 pts each) = 30 pts.',
+    starterCode: `; Lab 3: Single Procedure Call
+; Memory layout:
+;   [0x1F00] = n1  (array length)
+;   Array A[] at 0x2000: A[0]=[0x2000], A[1]=[0x2004], ...
+;   Array B[] at 0x3000: B[0]=[0x3000], B[1]=[0x3004], ...
+;   Store result n2 at [0x1F04]
+;
+; Instructions available: CALL, RET, PUSH, POP, IMUL
+; Use CALL label / RET for procedure calls
 
-MOV EAX, 0x000000FF
-PUSH EAX
-MOV EAX, 0x00000000
-POP EAX
+; ── main ────────────────────────────────────
+MOV ECX, [0x1F00]         ; ECX = n1 (array length)
+MOV EBX, 0x00002000       ; EBX = base address of A[]
+MOV EDI, 0x00003000       ; EDI = base address of B[]
+
+; B[0] = 1 (A[0]^0 is always 1)
+MOV EAX, 1
+MOV [EDI], EAX
+
+; TODO: implement the main loop
+;   for j = 1 to n1-1:
+;     compute exp = exponent(A[j], j)
+;     call append(B, j, exp)
+;   store final n2 at [0x1F04]
+
+; Store n2 (should equal n1 when done)
+MOV [0x1F04], ECX
+
+; TODO: implement exponent and append functions
+; exponent: takes x (in EAX) and y (in ECX), returns result in EAX
+; append: takes B base (in EDI), index n2 (in ESI), value (in EAX)
 `,
   },
   4: {

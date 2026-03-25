@@ -64,6 +64,9 @@ pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) ->
     cpu.flags.sf = flags.sf;
     cpu.flags.of = flags.of;
 
+    // Advance instruction pointer
+    cpu.registers.advance_ip(instruction.length as u32);
+
     Ok(())
 }
 

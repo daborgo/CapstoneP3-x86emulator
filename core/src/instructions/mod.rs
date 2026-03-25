@@ -17,6 +17,7 @@ pub mod mul;
 pub mod and;
 pub mod or;
 pub mod shift;
+pub mod cmp;
 pub mod instruction_error_tests;
 
 use crate::cpu::CPU;
@@ -38,6 +39,7 @@ pub enum InstructionError {
     AndError(and::ExecutionError),
     OrError(or::ExecutionError),
     ShiftError(shift::ExecutionError),
+    CmpError(cmp::ExecutionError),
 }
 
 impl fmt::Display for InstructionError {
@@ -55,6 +57,7 @@ impl fmt::Display for InstructionError {
             InstructionError::AndError(e)   => write!(f, "AND error: {}", e),
             InstructionError::OrError(e)    => write!(f, "OR error: {}", e),
             InstructionError::ShiftError(e) => write!(f, "Shift error: {}", e),
+            InstructionError::CmpError(e)   => write!(f, "CMP error: {}", e),
         }
     }
 }
@@ -70,6 +73,7 @@ impl From<mul::ExecutionError>   for InstructionError { fn from(e: mul::Executio
 impl From<and::ExecutionError>   for InstructionError { fn from(e: and::ExecutionError)   -> Self { InstructionError::AndError(e) } }
 impl From<or::ExecutionError>    for InstructionError { fn from(e: or::ExecutionError)    -> Self { InstructionError::OrError(e) } }
 impl From<shift::ExecutionError> for InstructionError { fn from(e: shift::ExecutionError) -> Self { InstructionError::ShiftError(e) } }
+impl From<cmp::ExecutionError>   for InstructionError { fn from(e: cmp::ExecutionError)   -> Self { InstructionError::CmpError(e) } }
 impl From<mov::ExecutionError>   for InstructionError {
     fn from(e: mov::ExecutionError) -> Self { InstructionError::MovError(format!("{:?}", e)) }
 }
@@ -119,6 +123,7 @@ pub fn execute(
         Opcode::RET  => { ret::execute(cpu, memory, instruction)?; Ok(()) }
         Opcode::CALL => { call::execute(cpu, memory, instruction)?; Ok(()) }
         Opcode::MUL  => { mul::execute_mul(cpu, memory, instruction)?; Ok(()) }
+        Opcode::IMUL => { mul::execute_imul(cpu, memory, instruction)?; Ok(()) }
         Opcode::IDIV => { mul::execute_idiv(cpu, memory, instruction)?; Ok(()) }
         Opcode::CDQ  => { mul::execute_cdq(cpu, memory, instruction)?; Ok(()) }
         Opcode::AND  => { and::execute(cpu, memory, instruction)?; Ok(()) }
@@ -126,5 +131,38 @@ pub fn execute(
         Opcode::SHL  => { shift::execute_shl(cpu, memory, instruction)?; Ok(()) }
         Opcode::SHR  => { shift::execute_shr(cpu, memory, instruction)?; Ok(()) }
         Opcode::SAR  => { shift::execute_sar(cpu, memory, instruction)?; Ok(()) }
+        Opcode::CMP  => { cmp::execute(cpu, memory, instruction)?; Ok(()) }
+        Opcode::JE | Opcode::JNE | Opcode::JL | Opcode::JGE | Opcode::JLE | Opcode::JG => {
+            execute_jcc(cpu, instruction)
+        }
     }
+}
+
+/// Execute a conditional jump instruction
+fn execute_jcc(cpu: &mut CPU, instruction: &Instruction) -> Result<(), InstructionError> {
+    let taken = match instruction.opcode {
+        Opcode::JE  => cpu.flags.zf,
+        Opcode::JNE => !cpu.flags.zf,
+        Opcode::JL  => cpu.flags.sf != cpu.flags.of,
+        Opcode::JGE => cpu.flags.sf == cpu.flags.of,
+        Opcode::JLE => cpu.flags.zf || (cpu.flags.sf != cpu.flags.of),
+        Opcode::JG  => !cpu.flags.zf && (cpu.flags.sf == cpu.flags.of),
+        _ => return Err(InstructionError::UnsupportedInstruction(instruction.opcode)),
+    };
+
+    if taken {
+        if let Some(Operand::Immediate(disp)) = instruction.dest {
+            let disp = disp as i8;
+            let new_ip = (cpu.registers.eip as i32)
+                .wrapping_add(instruction.length as i32)
+                .wrapping_add(disp as i32);
+            cpu.registers.eip = new_ip as u32;
+        } else {
+            return Err(InstructionError::JmpError("Missing displacement for conditional jump".to_string()));
+        }
+    } else {
+        cpu.registers.advance_ip(instruction.length as u32);
+    }
+
+    Ok(())
 }
