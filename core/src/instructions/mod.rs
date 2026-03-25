@@ -13,6 +13,7 @@ pub mod add;
 pub mod mov;
 pub mod jmp;
 pub mod ret;
+pub mod cmp;
 
 use crate::cpu::CPU;
 use crate::decoder::{Instruction, Opcode};
@@ -30,6 +31,7 @@ pub enum InstructionError {
     MovError(String),
     SubError(sub::ExecutionError),
     AddError(add::ExecutionError),
+    CmpError(cmp::ExecutionError),
     /// JMP instruction specific errors
     JmpError(String),
     /// Execution error from RET
@@ -56,6 +58,9 @@ impl fmt::Display for InstructionError {
             },
             InstructionError::AddError(err) => {
                 write!(f, "ADD error: {:?}", err)
+            },
+            InstructionError::CmpError(err) => {
+                write!(f, "CMP error: {}", err)
             },
             InstructionError::JmpError(msg) => {
                 write!(f, "JMP error: {}", msg)
@@ -97,6 +102,12 @@ impl From<sub::ExecutionError> for InstructionError {
 impl From<add::ExecutionError> for InstructionError {
     fn from(err: add::ExecutionError) -> Self {
         InstructionError::AddError(err)
+    }
+}
+
+impl From<cmp::ExecutionError> for InstructionError {
+    fn from(err: cmp::ExecutionError) -> Self {
+        InstructionError::CmpError(err)
     }
 }
 
@@ -176,6 +187,10 @@ pub fn execute(
         },
         Opcode::ADD => {
             add::add(cpu, memory, instruction)?;
+            Ok(())
+        },
+        Opcode::CMP => {
+            cmp::execute(cpu, memory, instruction)?;
             Ok(())
         },
         Opcode::JMP => {
