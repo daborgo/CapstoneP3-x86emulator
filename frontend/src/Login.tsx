@@ -17,7 +17,7 @@ export default function Login() {
     }
     setError('')
     if (username && password) {
-      navigate('/emulator')
+      navigate('/lab1')
     }
   }
 
