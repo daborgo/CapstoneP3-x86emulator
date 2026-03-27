@@ -7,6 +7,7 @@ import Login from './Login.tsx'
 import Auth from './Auth.tsx'
 import Sidebar from './Sidebar.tsx'
 import LabPage from './LabPage.tsx'
+import InstructorSubmissions from './InstructorSubmissions.tsx'
 
 function LabLayout() {
   return (
@@ -27,6 +28,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/login" element={<Login />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/emulator" element={<App />} />
+        <Route path="/submissions" element={<InstructorSubmissions />} />
         <Route element={<LabLayout />}>
           <Route path="/lab1" element={<LabPage key="lab1" />} />
           <Route path="/lab2" element={<LabPage key="lab2" />} />

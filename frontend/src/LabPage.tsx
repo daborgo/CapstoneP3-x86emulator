@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { labConfigs } from './labConfig'
 import GradingPanel, { type GradingResult } from './GradingPanel'
+import { saveStudentSubmission } from './submissionsStore'
 import './App.css'
 
 type WasmModule = typeof import('./wasm/pkg/web_x86_core')
@@ -700,6 +701,23 @@ export default function LabPage() {
     }
   }
 
+  function handleStudentSubmit() {
+    const result = buildGradingResult()
+    if (!result) return null
+
+    if (userRole === 'student') {
+      saveStudentSubmission({
+        labId: labNum,
+        studentUsername: username || 'Unknown Student',
+        autoEarned: result.earned,
+        total: result.total,
+        details: result.details,
+      })
+    }
+
+    return result
+  }
+
   return (
     <div className="app-root">
       <header className="topbar">
@@ -768,7 +786,7 @@ export default function LabPage() {
           <GradingPanel
             labId={labNum}
             description={config.description}
-            onSubmit={buildGradingResult}
+            onSubmit={handleStudentSubmit}
           />
         </aside>
 
