@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { labConfigs } from './labConfig'
 import GradingPanel, { type GradingResult } from './GradingPanel'
 import './App.css'
@@ -492,6 +492,7 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
 
 export default function LabPage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const labNum = parseInt(location.pathname.replace('/lab', '')) || 1
   const config = labConfigs[labNum] ?? labConfigs[1]
 
@@ -499,6 +500,8 @@ export default function LabPage() {
   const [consoleOutput, setConsoleOutput] = useState('')
   const [steps, setSteps] = useState(0)
   const [wasmReady, setWasmReady] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [username, setUsername] = useState<string | null>(null)
 
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
@@ -517,6 +520,20 @@ export default function LabPage() {
 
   const [flags, setFlags] = useState({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
   const [memoryView, setMemoryView] = useState<number[]>(Array(48).fill(0))
+
+  // Check auth and role on mount
+  useEffect(() => {
+    const role = localStorage.getItem('userRole')
+    const user = localStorage.getItem('username')
+
+    if (!role) {
+      navigate('/login')
+      return
+    }
+
+    setUserRole(role)
+    setUsername(user || 'User')
+  }, [navigate])
 
   // Reset state when switching labs
   useEffect(() => {
@@ -688,6 +705,11 @@ export default function LabPage() {
       <header className="topbar">
         <div className="brand">ASU</div>
         <div className="title">{config.title}</div>
+        <div style={{ marginLeft: 'auto', paddingRight: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.9rem' }}>
+          <span>
+            {userRole === 'admin' ? 'Instructor/Admin' : 'Student'}: {username}
+          </span>
+        </div>
         <div className="toolbar">
           <button onClick={onRun} className="primary">Run</button>
           <button onClick={onStep}>Step</button>
