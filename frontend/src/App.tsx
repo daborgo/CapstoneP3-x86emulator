@@ -502,8 +502,26 @@ async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
         </aside>
 
         <section className="console-pane">
-          <div className="console-header">Console</div>
-          <pre className="console-output" role="log" aria-live="polite">{consoleOutput}</pre>
+          <div className="console-header">Console
+            <button className='copy-btn' onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(consoleOutput)
+                setConsoleOutput((s) => s + 'Copied console to clipboard.\n')
+              }
+              catch {
+                //nothing
+              }
+            }} type = "button">
+              Copy
+            </button>
+          </div>
+          <textarea
+            className="console"
+            value={consoleOutput}
+            readOnly
+            spellCheck={false}
+            aria-label="Console output"
+          />
         </section>
       </main>
     </div>
