@@ -672,6 +672,13 @@ export default function LabPage() {
     setMemoryView(Array(48).fill(0))
   }
 
+  function onLogout() {
+    localStorage.removeItem('userRole')
+    localStorage.removeItem('username')
+    document.cookie = 'canvasAuth=; Max-Age=0; path=/'
+    navigate('/login')
+  }
+
   function buildGradingResult(): GradingResult | null {
     if (!wasmModRef.current) return null
 
@@ -732,6 +739,7 @@ export default function LabPage() {
           <button onClick={onRun} className="primary">Run</button>
           <button onClick={onStep}>Step</button>
           <button onClick={onReset}>Reset</button>
+          <button onClick={onLogout} style={{ background: '#ff0000', color: '#ffffff' }}>Logout</button>
         </div>
       </header>
 
