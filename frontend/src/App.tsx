@@ -59,7 +59,6 @@ export default function App() {
   // placeholder registers
   const [registers, setRegisters] = useState<RegistersState>({ ...DEFAULT_REGISTERS })
   const lastValidRegistersRef = useRef<RegistersState>({ ...DEFAULT_REGISTERS })
-  const warnedUnsupportedRegsRef = useRef<Set<RegisterKey>>(new Set())
 
   // placeholder flags
   const [flags, setFlags] = useState({
@@ -100,12 +99,36 @@ export default function App() {
     return `0x${(val >>> 0).toString(16).padStart(8, '0')}`
   }
 
-  const setEmuRegister = (emu: EmulatorApi, reg: RegisterKey, value: number): boolean => {
-    if (reg === 'eax') {
-      emu.set_eax(value)
-      return true
+  const setEmuRegister = (emu: EmulatorApi, reg: RegisterKey, value: number): void => {
+    switch (reg) {
+      case 'eip':
+        emu.set_eip(value)
+        break
+      case 'eax':
+        emu.set_eax(value)
+        break
+      case 'ebx':
+        emu.set_ebx(value)
+        break
+      case 'ecx':
+        emu.set_ecx(value)
+        break
+      case 'edx':
+        emu.set_edx(value)
+        break
+      case 'ebp':
+        emu.set_ebp(value)
+        break
+      case 'esp':
+        emu.set_esp(value)
+        break
+      case 'esi':
+        emu.set_esi(value)
+        break
+      case 'edi':
+        emu.set_edi(value)
+        break
     }
-    return false
   }
 
   const applyRegistersToEmu = (emu: EmulatorApi, regs: RegistersState) => {
@@ -129,11 +152,7 @@ export default function App() {
 
     const emu = wasmEmuRef.current
     if (emu) {
-      const didSet = setEmuRegister(emu, reg, parsed)
-      if (!didSet && !warnedUnsupportedRegsRef.current.has(reg)) {
-        warnedUnsupportedRegsRef.current.add(reg)
-        setConsoleOutput((s) => s + `Note: ${reg.toUpperCase()} cannot be pushed to emulator yet; backend currently exposes set_eax only.\n`)
-      }
+      setEmuRegister(emu, reg, parsed)
     }
   }
 
@@ -173,6 +192,8 @@ export default function App() {
   // - POP <REG>            (encodes 58..5F)
   // - ADD <REG>, <REG|IMM32> (01/81 /0)
   // - SUB <REG>, <REG|IMM32> (29/81 /5)
+  // - AND <REG>, <REG|IMM32> (21/81 /4)
+  // - OR  <REG>, <REG|IMM32> (09/81 /1)
   // - CMP <REG>, <REG|IMM32> (3B/81 /7)
   // - JMP <REL|LABEL>      (EB rel8 if -128..127 else E9 rel32)
   // - RET                  (C3)
@@ -241,7 +262,7 @@ export default function App() {
         return parts.length === 2 ? 1 : 0
       }
 
-      if (op === 'ADD' || op === 'SUB' || op === 'CMP') {
+      if (op === 'ADD' || op === 'SUB' || op === 'AND' || op === 'OR' || op === 'CMP') {
         if (parts.length !== 3 || regIndex(parts[1]) < 0) return 0
         return regIndex(parts[2]) >= 0 ? 2 : 6
       }
@@ -479,6 +500,38 @@ export default function App() {
           }
           // ModR/M: 11 100 dst (register mode, AND opcode extension /4)
           const modrm = 0xE0 | dstIdx
+          out.push(0x81, modrm, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
+        }
+      } else if (op === 'OR') {
+        if (parts.length !== 3) {
+          errors.push(`Line ${i + 1}: OR expects 2 operands`)
+          continue
+        }
+        const dst = parts[1].toUpperCase()
+        const dstIdx = regIndex(dst)
+        if (dstIdx < 0) {
+          errors.push(`Line ${i + 1}: Unsupported destination register '${dst}'`)
+          continue
+        }
+
+        // Check if source is register or immediate
+        const srcReg = parts[2].toUpperCase()
+        const srcIdx = regIndex(srcReg)
+
+        if (srcIdx >= 0) {
+          // OR reg, reg: opcode 0x09 + ModR/M byte
+          // ModR/M: 11 src dst (both in register mode)
+          const modrm = 0xC0 | (srcIdx << 3) | dstIdx
+          out.push(0x09, modrm)
+        } else {
+          // OR reg, imm: opcode 0x81 + ModR/M byte (reg field = 1 for OR) + imm32
+          const imm = toNum(parts[2])
+          if (imm == null) {
+            errors.push(`Line ${i + 1}: Expected register or immediate (hex like 0x123 or decimal)`)
+            continue
+          }
+          // ModR/M: 11 001 dst (register mode, OR opcode extension /1)
+          const modrm = 0xC8 | dstIdx
           out.push(0x81, modrm, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
         }
       } else if (op === 'CMP') {

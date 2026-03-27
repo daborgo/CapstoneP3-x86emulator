@@ -11,6 +11,7 @@ pub mod call;
 pub mod sub;
 pub mod add;
 pub mod and;
+pub mod or;
 pub mod mov;
 pub mod jmp;
 pub mod ret;
@@ -33,6 +34,7 @@ pub enum InstructionError {
     SubError(sub::ExecutionError),
     AddError(add::ExecutionError),
     AndError(and::ExecutionError),
+    OrError(or::ExecutionError),
     CmpError(cmp::ExecutionError),
     /// JMP instruction specific errors
     JmpError(String),
@@ -63,6 +65,9 @@ impl fmt::Display for InstructionError {
             },
             InstructionError::AndError(err) => {
                 write!(f, "AND error: {}", err)
+            },
+            InstructionError::OrError(err) => {
+                write!(f, "OR error: {}", err)
             },
             InstructionError::CmpError(err) => {
                 write!(f, "CMP error: {}", err)
@@ -113,6 +118,12 @@ impl From<add::ExecutionError> for InstructionError {
 impl From<and::ExecutionError> for InstructionError {
     fn from(err: and::ExecutionError) -> Self {
         InstructionError::AndError(err)
+    }
+}
+
+impl From<or::ExecutionError> for InstructionError {
+    fn from(err: or::ExecutionError) -> Self {
+        InstructionError::OrError(err)
     }
 }
 
@@ -202,6 +213,10 @@ pub fn execute(
         },
         Opcode::AND => {
             and::execute(cpu, memory, instruction)?;
+            Ok(())
+        },
+        Opcode::OR => {
+            or::execute(cpu, memory, instruction)?;
             Ok(())
         },
         Opcode::CMP => {

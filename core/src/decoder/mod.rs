@@ -54,6 +54,7 @@ pub enum Opcode {
     /// ADD instruction - add source to destination
     ADD,
     AND,
+    OR,
     /// JMP instruction - jump to target location
     JMP,
     /// RET instruction - return from function
@@ -72,6 +73,7 @@ impl fmt::Display for Opcode {
             Opcode::SUB => write!(f, "SUB"),
             Opcode::ADD => write!(f, "ADD"),
             Opcode::AND => write!(f, "AND"),
+            Opcode::OR => write!(f, "OR"),
             Opcode::JMP => write!(f, "JMP"),
             Opcode::RET => write!(f, "RET"),
             Opcode::CMP => write!(f, "CMP"),
@@ -206,6 +208,8 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
 
         0x21 => Ok(Opcode::AND),  // AND r/m32, r32
         0x23 => Ok(Opcode::AND),  // AND r32, r/m32
+        0x09 => Ok(Opcode::OR),   // OR r/m32, r32
+        0x0B => Ok(Opcode::OR),   // OR r32, r/m32
         // RET instruction
         0xC3 => Ok(Opcode::RET),  // Near return
 
@@ -551,7 +555,7 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 },
                 0x81 => {
                     // 0x81 is a group opcode: reg field selects the actual operation
-                    // /0 = ADD, /5 = SUB, /7 = CMP
+                    // /0 = ADD, /1 = OR, /4 = AND, /5 = SUB, /7 = CMP
                     if bytes.len() < 6 {
                         return Err(DecodeError::InsufficientBytes);
                     }
@@ -582,6 +586,18 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                     match reg_field {
                         0 => Ok(Instruction {
                             opcode: Opcode::ADD,
+                            dest: Some(Operand::Register(dest_reg)),
+                            src: Some(Operand::Immediate(imm)),
+                            length: 6,
+                        }),
+                        1 => Ok(Instruction {
+                            opcode: Opcode::OR,
+                            dest: Some(Operand::Register(dest_reg)),
+                            src: Some(Operand::Immediate(imm)),
+                            length: 6,
+                        }),
+                        4 => Ok(Instruction {
+                            opcode: Opcode::AND,
                             dest: Some(Operand::Register(dest_reg)),
                             src: Some(Operand::Immediate(imm)),
                             length: 6,
@@ -645,6 +661,62 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                     };
 
                     let (dest_reg, src_reg) = if opcode_byte == 0x21 {
+                        (rm_field, reg_field)
+                    } else {
+                        (reg_field, rm_field)
+                    };
+
+                    Ok(Instruction {
+                        opcode,
+                        dest: Some(Operand::Register(dest_reg)),
+                        src: Some(Operand::Register(src_reg)),
+                        length: 2,
+                    })
+                }
+                _ => Err(DecodeError::InvalidFormat),
+            }
+        },
+        Opcode::OR => {
+            match opcode_byte {
+                0x09 | 0x0B => {
+                    // OR r/m32, r32 (0x09) or OR r32, r/m32 (0x0B)
+                    if bytes.len() < 2 {
+                        return Err(DecodeError::InsufficientBytes);
+                    }
+
+                    let modrm = bytes[1];
+                    let mod_bits = modrm >> 6;
+
+                    // Only handle register-to-register (mod = 11)
+                    if mod_bits != 0b11 {
+                        return Err(DecodeError::InvalidFormat);
+                    }
+
+                    let reg_field = match (modrm >> 3) & 0x7 {
+                        0 => crate::cpu::RegisterName::EAX,
+                        1 => crate::cpu::RegisterName::ECX,
+                        2 => crate::cpu::RegisterName::EDX,
+                        3 => crate::cpu::RegisterName::EBX,
+                        4 => crate::cpu::RegisterName::ESP,
+                        5 => crate::cpu::RegisterName::EBP,
+                        6 => crate::cpu::RegisterName::ESI,
+                        7 => crate::cpu::RegisterName::EDI,
+                        _ => unreachable!(),
+                    };
+
+                    let rm_field = match modrm & 0x7 {
+                        0 => crate::cpu::RegisterName::EAX,
+                        1 => crate::cpu::RegisterName::ECX,
+                        2 => crate::cpu::RegisterName::EDX,
+                        3 => crate::cpu::RegisterName::EBX,
+                        4 => crate::cpu::RegisterName::ESP,
+                        5 => crate::cpu::RegisterName::EBP,
+                        6 => crate::cpu::RegisterName::ESI,
+                        7 => crate::cpu::RegisterName::EDI,
+                        _ => unreachable!(),
+                    };
+
+                    let (dest_reg, src_reg) = if opcode_byte == 0x09 {
                         (rm_field, reg_field)
                     } else {
                         (reg_field, rm_field)
@@ -729,6 +801,12 @@ mod tests {
         assert_eq!(parse_opcode(0x51), Ok(Opcode::PUSH));
         assert_eq!(parse_opcode(0x57), Ok(Opcode::PUSH));
     }
+
+    #[test]
+    fn test_parse_opcode_or() {
+        assert_eq!(parse_opcode(0x09), Ok(Opcode::OR));
+        assert_eq!(parse_opcode(0x0B), Ok(Opcode::OR));
+    }
     
     #[test]
     fn test_parse_opcode_unknown() {
@@ -746,5 +824,29 @@ mod tests {
         assert_eq!(get_push_register(0x55), Ok(RegisterName::EBP));
         assert_eq!(get_push_register(0x56), Ok(RegisterName::ESI));
         assert_eq!(get_push_register(0x57), Ok(RegisterName::EDI));
+    }
+
+    #[test]
+    fn test_decode_or_imm32_from_group_opcode() {
+        // OR EAX, 0x12345678 -> 81 C8 78 56 34 12  (reg field /1)
+        let bytes = [0x81, 0xC8, 0x78, 0x56, 0x34, 0x12];
+        let instr = decode(&bytes).expect("decode should succeed");
+
+        assert_eq!(instr.opcode, Opcode::OR);
+        assert_eq!(instr.dest, Some(Operand::Register(RegisterName::EAX)));
+        assert_eq!(instr.src, Some(Operand::Immediate(0x1234_5678)));
+        assert_eq!(instr.length, 6);
+    }
+
+    #[test]
+    fn test_decode_and_imm32_from_group_opcode() {
+        // AND EAX, 0x0000FFFF -> 81 E0 FF FF 00 00 (reg field /4)
+        let bytes = [0x81, 0xE0, 0xFF, 0xFF, 0x00, 0x00];
+        let instr = decode(&bytes).expect("decode should succeed");
+
+        assert_eq!(instr.opcode, Opcode::AND);
+        assert_eq!(instr.dest, Some(Operand::Register(RegisterName::EAX)));
+        assert_eq!(instr.src, Some(Operand::Immediate(0x0000_FFFF)));
+        assert_eq!(instr.length, 6);
     }
 }
