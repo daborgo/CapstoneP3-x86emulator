@@ -30,26 +30,6 @@ function getStringFromWasm0(ptr, len) {
     return decodeText(ptr, len);
 }
 
-function logError(f, args) {
-    try {
-        return f.apply(this, args);
-    } catch (e) {
-        let error = (function () {
-            try {
-                return e instanceof Error ? `${e.message}\n\nStack:\n${e.stack}` : e.toString();
-            } catch(_) {
-                return "<failed to stringify thrown value>";
-            }
-        }());
-        console.error("wasm-bindgen: imported JS function that was not marked as `catch` threw an error:", error);
-        throw e;
-    }
-}
-
-function _assertNum(n) {
-    if (typeof(n) !== 'number') throw new Error(`expected a number argument, found ${typeof(n)}`);
-}
-
 let WASM_VECTOR_LEN = 0;
 
 function passArray8ToWasm0(arg, malloc) {
@@ -57,6 +37,25 @@ function passArray8ToWasm0(arg, malloc) {
     getUint8ArrayMemory0().set(arg, ptr / 1);
     WASM_VECTOR_LEN = arg.length;
     return ptr;
+}
+/**
+ * @param {number} lab_id
+ * @param {Uint8Array} program
+ * @returns {string}
+ */
+export function grade_lab(lab_id, program) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passArray8ToWasm0(program, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.grade_lab(lab_id, ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
 }
 
 function takeFromExternrefTable0(idx) {
@@ -88,6 +87,20 @@ export class Emulator {
         wasm.__wbg_emulator_free(ptr, 0);
     }
     /**
+     * Load a program's raw bytes into memory at a given address and set EIP there
+     * Returns Err(String) on memory write failure.
+     * @param {Uint8Array} program
+     * @param {number} load_address
+     */
+    load_program(program, load_address) {
+        const ptr0 = passArray8ToWasm0(program, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.emulator_load_program(this.__wbg_ptr, ptr0, len0, load_address);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
      * Create a new emulator instance
      */
     constructor() {
@@ -95,23 +108,6 @@ export class Emulator {
         this.__wbg_ptr = ret >>> 0;
         EmulatorFinalization.register(this, this.__wbg_ptr, this);
         return this;
-    }
-    /**
-     * Load a program's raw bytes into memory at a given address and set EIP there
-     * Returns Err(String) on memory write failure.
-     * @param {Uint8Array} program
-     * @param {number} load_address
-     */
-    load_program(program, load_address) {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ptr0 = passArray8ToWasm0(program, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        _assertNum(load_address);
-        const ret = wasm.emulator_load_program(this.__wbg_ptr, ptr0, len0, load_address);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
     }
     /**
      * Execute one instruction using fetch-decode-execute cycle
@@ -124,29 +120,71 @@ export class Emulator {
      * @returns {bigint}
      */
     step() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.emulator_step(this.__wbg_ptr);
         return BigInt.asUintN(64, ret);
     }
     /**
-     * Get the number of steps executed
-     * @returns {bigint}
+     * Reset the emulator to initial state
      */
-    get_steps() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.emulator_get_steps(this.__wbg_ptr);
-        return BigInt.asUintN(64, ret);
+    reset() {
+        wasm.emulator_reset(this.__wbg_ptr);
+    }
+    /**
+     * @returns {boolean}
+     */
+    get_af() {
+        const ret = wasm.emulator_get_af(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Flag getters
+     * @returns {boolean}
+     */
+    get_cf() {
+        const ret = wasm.emulator_get_cf(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {boolean}
+     */
+    get_of() {
+        const ret = wasm.emulator_get_of(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {boolean}
+     */
+    get_pf() {
+        const ret = wasm.emulator_get_pf(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {boolean}
+     */
+    get_sf() {
+        const ret = wasm.emulator_get_sf(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {boolean}
+     */
+    get_zf() {
+        const ret = wasm.emulator_get_zf(this.__wbg_ptr);
+        return ret !== 0;
     }
     /**
      * Get EAX register value (for testing)
      * @returns {number}
      */
     get_eax() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.emulator_get_eax(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    get_ebp() {
+        const ret = wasm.emulator_get_ebp(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
@@ -154,8 +192,6 @@ export class Emulator {
      * @returns {number}
      */
     get_ebx() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.emulator_get_ebx(this.__wbg_ptr);
         return ret >>> 0;
     }
@@ -163,65 +199,36 @@ export class Emulator {
      * @returns {number}
      */
     get_ecx() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.emulator_get_ecx(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
      * @returns {number}
      */
-    get_edx() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.emulator_get_edx(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * @returns {number}
-     */
-    get_ebp() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.emulator_get_ebp(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * @returns {number}
-     */
-    get_esi() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.emulator_get_esi(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * @returns {number}
-     */
     get_edi() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.emulator_get_edi(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
-     * Set EAX register value (for testing)
-     * @param {number} value
+     * @returns {number}
      */
-    set_eax(value) {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        _assertNum(value);
-        wasm.emulator_set_eax(this.__wbg_ptr, value);
+    get_edx() {
+        const ret = wasm.emulator_get_edx(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
      * Get EIP (instruction pointer) value
      * @returns {number}
      */
     get_eip() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.emulator_get_eip(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    get_esi() {
+        const ret = wasm.emulator_get_esi(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
@@ -229,73 +236,58 @@ export class Emulator {
      * @returns {number}
      */
     get_esp() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
         const ret = wasm.emulator_get_esp(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
-     * Flag getters
-     * @returns {boolean}
+     * Read a single byte from memory (used by the UI memory viewer)
+     * @param {number} addr
+     * @returns {number}
      */
-    get_cf() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.emulator_get_cf(this.__wbg_ptr);
-        return ret !== 0;
+    read_u8(addr) {
+        const ret = wasm.emulator_read_u8(this.__wbg_ptr, addr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0];
     }
     /**
-     * @returns {boolean}
+     * Set EAX register value (for testing)
+     * @param {number} value
      */
-    get_pf() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.emulator_get_pf(this.__wbg_ptr);
-        return ret !== 0;
+    set_eax(value) {
+        wasm.emulator_set_eax(this.__wbg_ptr, value);
     }
     /**
-     * @returns {boolean}
+     * Read a 32-bit value from memory (for result checking / grading)
+     * @param {number} addr
+     * @returns {number}
      */
-    get_af() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.emulator_get_af(this.__wbg_ptr);
-        return ret !== 0;
+    read_u32(addr) {
+        const ret = wasm.emulator_read_u32(this.__wbg_ptr, addr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0] >>> 0;
     }
     /**
-     * @returns {boolean}
+     * Get the number of steps executed
+     * @returns {bigint}
      */
-    get_zf() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.emulator_get_zf(this.__wbg_ptr);
-        return ret !== 0;
+    get_steps() {
+        const ret = wasm.emulator_get_steps(this.__wbg_ptr);
+        return BigInt.asUintN(64, ret);
     }
     /**
-     * @returns {boolean}
+     * Write a 32-bit value to memory (for test setup / grading)
+     * @param {number} addr
+     * @param {number} val
      */
-    get_sf() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.emulator_get_sf(this.__wbg_ptr);
-        return ret !== 0;
-    }
-    /**
-     * @returns {boolean}
-     */
-    get_of() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        const ret = wasm.emulator_get_of(this.__wbg_ptr);
-        return ret !== 0;
-    }
-    /**
-     * Reset the emulator to initial state
-     */
-    reset() {
-        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
-        _assertNum(this.__wbg_ptr);
-        wasm.emulator_reset(this.__wbg_ptr);
+    write_u32(addr, val) {
+        const ret = wasm.emulator_write_u32(this.__wbg_ptr, addr, val);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
     }
 }
 if (Symbol.dispose) Emulator.prototype[Symbol.dispose] = Emulator.prototype.free;
@@ -341,11 +333,11 @@ function __wbg_get_imports() {
     imports.wbg.__wbg___wbindgen_throw_b855445ff6a94295 = function(arg0, arg1) {
         throw new Error(getStringFromWasm0(arg0, arg1));
     };
-    imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function() { return logError(function (arg0, arg1) {
+    imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.
         const ret = getStringFromWasm0(arg0, arg1);
         return ret;
-    }, arguments) };
+    };
     imports.wbg.__wbindgen_init_externref_table = function() {
         const table = wasm.__wbindgen_externrefs;
         const offset = table.grow(4);

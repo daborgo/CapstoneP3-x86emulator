@@ -1,5 +1,5 @@
 [package]
-name = "core"
+name = "web_x86_core"
 version = "0.1.0"
 edition = "2021"
 

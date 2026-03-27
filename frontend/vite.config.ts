@@ -7,4 +7,7 @@ export default defineConfig({
   plugins: [react(), wasm(), topLevelAwait()],
   worker: { format: 'es' },
   build: { target: 'esnext' },
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
 })
