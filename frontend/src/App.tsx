@@ -25,6 +25,13 @@ export default function App() {
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
   const LOAD_ADDR = 0x00001000
+  //Breakpoints
+  const [breakpoints, setBreakpoints] = useState<Set<number>>(new Set())
+  const [currentLine, setCurrentLine] = useState<number | null>(null)
+  const [paused, setPaused] = useState(false)
+  const editorScrollRef = useRef<HTMLTextAreaElement | null>(null)
+  const gutterScrollRef = useRef<HTMLDivElement | null>(null)
+  const lines = code.split('\n')
 
   // placeholder registers
   const [registers, setRegisters] = useState({
@@ -209,13 +216,29 @@ export default function App() {
 
       // Run up to a small instruction budget to avoid infinite loops
       const MAX_STEPS = 256
+      let hitBreakpoint = false
+
       for (let i = 0; i < MAX_STEPS; i++) {
+        const nextLine = i + 1
+
+        if (breakpoints.has(nextLine)) {
+          setCurrentLine(nextLine)
+          setPaused(true)
+          setConsoleOutput((s) => s + `Paused at breakpoint on line ${nextLine}\n`)
+          hitBreakpoint = true
+          break
+        }
         emu.step()
       }
+
       const total = Number(emu.get_steps?.() ?? 0)
       setSteps(total)
+      setCurrentLine(total + 1)
+      if (!hitBreakpoint) {
+        setPaused(false)
+        setConsoleOutput((s) => s + `Run complete. Steps=${total}\n`)
+      }
       refreshRegistersFromWasm(emu)
-      setConsoleOutput((s) => s + `Run complete. Steps=${total}\n`)
     } catch (e) {
       setConsoleOutput((s) => s + `WASM runtime error: ${String(e)}\n`)
     }
@@ -237,13 +260,73 @@ export default function App() {
 
     const emu = wasmEmuRef.current
     try {
+      const nextLine = steps + 1
+
+      if (breakpoints.has(nextLine)) {
+        setCurrentLine(nextLine)
+        setPaused(true)
+        setConsoleOutput((s) => s + `Paused at breakpoint on line ${nextLine}\n`)
+        return
+      }
+
       emu.step()
       const stepCount = Number(emu.get_steps())
       setSteps(stepCount)
+      setCurrentLine(stepCount + 1)
+      setPaused(false)
       setConsoleOutput((s) => s + `Step ${stepCount}\n`)
       refreshRegistersFromWasm(emu)
     } catch (e) {
       setConsoleOutput((s) => s + `WASM step error: ${String(e)}\n`)
+    }
+  }
+
+  function onContinue() {
+    if (!wasmEmuRef.current) {
+      setConsoleOutput((s) => s + 'No emulator instance to continue\n')
+      return
+    }
+
+    const emu = wasmEmuRef.current
+
+    try {
+      setPaused(false)
+
+      emu.step() //step once to move off breakpoint
+
+      const steppedLine = Number(emu.get_steps()) + 1
+      setSteps(Number(emu.get_steps()))
+      setCurrentLine(steppedLine)
+
+      const MAX_STEPS = 256
+      let hitBreakpoint = false
+
+      for (let i = 0; i < MAX_STEPS; i++) {
+        const nextLine = Number(emu.get_steps()) + 1
+
+        if (breakpoints.has(nextLine)) {
+          setCurrentLine(nextLine)
+          setPaused(true)
+          setConsoleOutput((s) => s + `Paused at breakpoint on line ${nextLine}\n`)
+          hitBreakpoint = true
+          break
+        }
+
+        emu.step()
+      }
+
+      const stepCount = Number(emu.get_steps())
+      setSteps(stepCount)
+      setCurrentLine(stepCount + 1)
+
+      if (!hitBreakpoint) {
+        setPaused(false)
+        setConsoleOutput((s) => s + `Continue complete. Steps=${stepCount}\n`)
+      }
+
+      refreshRegistersFromWasm(emu)
+    } catch (e) {
+      setConsoleOutput((s) => s + `WASM continue error: ${String(e)}\n`)
     }
   }
 
@@ -253,6 +336,9 @@ export default function App() {
       try {
         emu.reset()
         setSteps(0)
+        setPaused(false)
+        setCurrentLine(null)
+        setBreakpoints(new Set())
         setConsoleOutput('')
         refreshRegistersFromWasm(emu)
       } catch (e) {
@@ -295,8 +381,21 @@ export default function App() {
     } catch (e) {
       setConsoleOutput((s) => s + `WASM refresh error: ${String(e)}\n`)
     }
+
   }
 
+  function toggleBreakpoint(addr: number) {
+    setBreakpoints((prev) => {
+      const next = new Set(prev)
+      if (next.has(addr)) {
+        next.delete(addr)
+      } else {
+        next.add(addr)
+      }
+      return next
+    })
+  }
+  
   return (
     <div className="app-root">
       <header className="topbar">
@@ -308,6 +407,16 @@ export default function App() {
           <button>Save as</button>
           <button onClick={onRun} className="primary">Run</button>
           <button onClick={onStep}>Step</button>
+          <button onClick={onContinue} disabled={!paused}>Continue</button>
+          <button
+            onClick={() => {
+              setBreakpoints(new Set())
+              setCurrentLine(null)
+              setPaused(false)
+            }}
+          >
+            Clear Breakpoints
+          </button>          
           <button onClick={onReset}>Reset</button>
         </div>
       </header>
@@ -315,13 +424,48 @@ export default function App() {
       <main className="main-grid">
         <section className="editor-pane">
           <div className="editor-header">Assembly Editor</div>
-          <textarea
+          <div className='editor-wrap'>
+            <div 
+              className='gutter'
+              ref={gutterScrollRef}
+              aria-label="Breakpoint gutter"
+            >
+              {lines.map((_, idx) => {
+                const lineNo = idx + 1
+                const hasBreakpoint = breakpoints.has(lineNo)
+                return (
+                  <div
+                    key={lineNo}
+                    className={`gutter-line 
+                      ${currentLine === lineNo ? 'current-line' : ''} 
+                      ${currentLine === lineNo && breakpoints.has(lineNo) ? 'break-hit' : ''}
+                    `}
+                    onClick={() => toggleBreakpoint(lineNo)}
+                    title={hasBreakpoint ? `Remove breakpoint at line ${lineNo}` : `Add breakpoint at line ${lineNo}`}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <span className={`bp-dot ${hasBreakpoint ? 'on' : ''}`} />
+                    <span className="line-no">{lineNo}</span>
+                  </div>
+                )
+              })}
+              </div>
+              <textarea
             className="editor"
+            ref={editorScrollRef}
             value={code}
             onChange={(e) => setCode(e.target.value)}
+            onScroll={(e) => {
+              const el = e.currentTarget
+              if(gutterScrollRef.current) {
+                gutterScrollRef.current.scrollTop = el.scrollTop
+              }
+            }}
             spellCheck={false}
             aria-label="Assembly editor"
           />
+          </div>
         </section>
 
         <aside className="sidebar">
