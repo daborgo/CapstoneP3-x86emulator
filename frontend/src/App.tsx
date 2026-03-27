@@ -449,6 +449,38 @@ export default function App() {
           const modrm = 0xC0 | dstIdx
           out.push(0x81, modrm, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
         }
+      } else if (op === 'AND') {
+        if (parts.length !== 3) {
+          errors.push(`Line ${i + 1}: AND expects 2 operands`)
+          continue
+        }
+        const dst = parts[1].toUpperCase()
+        const dstIdx = regIndex(dst)
+        if (dstIdx < 0) {
+          errors.push(`Line ${i + 1}: Unsupported destination register '${dst}'`)
+          continue
+        }
+
+        // Check if source is register or immediate
+        const srcReg = parts[2].toUpperCase()
+        const srcIdx = regIndex(srcReg)
+
+        if (srcIdx >= 0) {
+          // AND reg, reg: opcode 0x21 + ModR/M byte
+          // ModR/M: 11 src dst (both in register mode)
+          const modrm = 0xC0 | (srcIdx << 3) | dstIdx
+          out.push(0x21, modrm)
+        } else {
+          // AND reg, imm: opcode 0x81 + ModR/M byte (reg field = 4 for AND) + imm32
+          const imm = toNum(parts[2])
+          if (imm == null) {
+            errors.push(`Line ${i + 1}: Expected register or immediate (hex like 0x123 or decimal)`)
+            continue
+          }
+          // ModR/M: 11 100 dst (register mode, AND opcode extension /4)
+          const modrm = 0xE0 | dstIdx
+          out.push(0x81, modrm, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
+        }
       } else if (op === 'CMP') {
         if (parts.length !== 3) {
           errors.push(`Line ${i + 1}: CMP expects 2 operands`)

@@ -53,6 +53,7 @@ pub enum Opcode {
     SUB,
     /// ADD instruction - add source to destination
     ADD,
+    AND,
     /// JMP instruction - jump to target location
     JMP,
     /// RET instruction - return from function
@@ -67,9 +68,10 @@ impl fmt::Display for Opcode {
             Opcode::POP => write!(f, "POP"),
             Opcode::PUSH => write!(f, "PUSH"),
             Opcode::CALL => write!(f, "CALL"),
-            Opcode::MOV  => write!(f, "MOV"),
+            Opcode::MOV => write!(f, "MOV"),
             Opcode::SUB => write!(f, "SUB"),
             Opcode::ADD => write!(f, "ADD"),
+            Opcode::AND => write!(f, "AND"),
             Opcode::JMP => write!(f, "JMP"),
             Opcode::RET => write!(f, "RET"),
             Opcode::CMP => write!(f, "CMP"),
@@ -201,7 +203,9 @@ pub fn parse_opcode(opcode_byte: u8) -> Result<Opcode, DecodeError> {
         0x03 => Ok(Opcode::ADD),  // ADD r32, r/m32
         0x04 => Ok(Opcode::ADD),  // ADD AL, imm8
         0x05 => Ok(Opcode::ADD),  // ADD EAX, imm32
-        
+
+        0x21 => Ok(Opcode::AND),  // AND r/m32, r32
+        0x23 => Ok(Opcode::AND),  // AND r32, r/m32
         // RET instruction
         0xC3 => Ok(Opcode::RET),  // Near return
 
@@ -598,6 +602,62 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                     }
                 },
                 _ => Err(DecodeError::UnknownOpcode(opcode_byte)),
+            }
+        },
+        Opcode::AND => {
+            match opcode_byte {
+                0x21 | 0x23 => {
+                    // AND r/m32, r32 (0x21) or AND r32, r/m32 (0x23)
+                    if bytes.len() < 2 {
+                        return Err(DecodeError::InsufficientBytes);
+                    }
+
+                    let modrm = bytes[1];
+                    let mod_bits = modrm >> 6;
+
+                    // Only handle register-to-register (mod = 11)
+                    if mod_bits != 0b11 {
+                        return Err(DecodeError::InvalidFormat);
+                    }
+
+                    let reg_field = match (modrm >> 3) & 0x7 {
+                        0 => crate::cpu::RegisterName::EAX,
+                        1 => crate::cpu::RegisterName::ECX,
+                        2 => crate::cpu::RegisterName::EDX,
+                        3 => crate::cpu::RegisterName::EBX,
+                        4 => crate::cpu::RegisterName::ESP,
+                        5 => crate::cpu::RegisterName::EBP,
+                        6 => crate::cpu::RegisterName::ESI,
+                        7 => crate::cpu::RegisterName::EDI,
+                        _ => unreachable!(),
+                    };
+
+                    let rm_field = match modrm & 0x7 {
+                        0 => crate::cpu::RegisterName::EAX,
+                        1 => crate::cpu::RegisterName::ECX,
+                        2 => crate::cpu::RegisterName::EDX,
+                        3 => crate::cpu::RegisterName::EBX,
+                        4 => crate::cpu::RegisterName::ESP,
+                        5 => crate::cpu::RegisterName::EBP,
+                        6 => crate::cpu::RegisterName::ESI,
+                        7 => crate::cpu::RegisterName::EDI,
+                        _ => unreachable!(),
+                    };
+
+                    let (dest_reg, src_reg) = if opcode_byte == 0x21 {
+                        (rm_field, reg_field)
+                    } else {
+                        (reg_field, rm_field)
+                    };
+
+                    Ok(Instruction {
+                        opcode,
+                        dest: Some(Operand::Register(dest_reg)),
+                        src: Some(Operand::Register(src_reg)),
+                        length: 2,
+                    })
+                }
+                _ => Err(DecodeError::InvalidFormat),
             }
         },
         Opcode::CMP => {
