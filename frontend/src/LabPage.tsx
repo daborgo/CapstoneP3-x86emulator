@@ -1,13 +1,30 @@
 import { useState, useEffect, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
-import { labConfigs } from './labConfig'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { getLabContent, saveLabContent } from './labContentStore'
 import GradingPanel, { type GradingResult } from './GradingPanel'
+import { saveStudentSubmission } from './submissionsStore'
 import './App.css'
 
 type WasmModule = typeof import('./wasm/pkg/web_x86_core')
 type EmulatorApi = import('./wasm/pkg/web_x86_core').Emulator
 
 const LOAD_ADDR = 0x00001000
+
+function PencilButton({
+  onClick,
+  label,
+}: {
+  onClick: () => void
+  label: string
+}) {
+  return (
+    <button className="icon-btn" type="button" onClick={onClick} aria-label={label} title={label}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M3 17.25V21h3.75L17.8 9.95l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l9.06-9.06.92.92-9.06 9.06zM20.71 7.04a1.003 1.003 0 000-1.42L18.37 3.29a1.003 1.003 0 00-1.42 0L15.12 5.12l3.75 3.75 1.84-1.83z" />
+      </svg>
+    </button>
+  )
+}
 
 // ─── Register index helpers ───────────────────────────────────────────────────
 
@@ -492,13 +509,22 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
 
 export default function LabPage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const labNum = parseInt(location.pathname.replace('/lab', '')) || 1
-  const config = labConfigs[labNum] ?? labConfigs[1]
+  const [labConfig, setLabConfig] = useState(() => getLabContent(labNum))
 
-  const [code, setCode] = useState(config.starterCode)
+  const [code, setCode] = useState(labConfig.starterCode)
   const [consoleOutput, setConsoleOutput] = useState('')
   const [steps, setSteps] = useState(0)
   const [wasmReady, setWasmReady] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [username, setUsername] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [editingDescription, setEditingDescription] = useState(false)
+  const [editingStarterCode, setEditingStarterCode] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editStarterCode, setEditStarterCode] = useState('')
 
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
@@ -518,9 +544,31 @@ export default function LabPage() {
   const [flags, setFlags] = useState({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
   const [memoryView, setMemoryView] = useState<number[]>(Array(48).fill(0))
 
+  // Check auth and role on mount
+  useEffect(() => {
+    const role = localStorage.getItem('userRole')
+    const user = localStorage.getItem('username')
+
+    if (!role) {
+      navigate('/login')
+      return
+    }
+
+    setUserRole(role)
+    setUsername(user || 'User')
+  }, [navigate])
+
   // Reset state when switching labs
   useEffect(() => {
-    setCode(config.starterCode)
+    const nextLabContent = getLabContent(labNum)
+    setLabConfig(nextLabContent)
+    setCode(nextLabContent.starterCode)
+    setEditTitle(nextLabContent.title)
+    setEditDescription(nextLabContent.description)
+    setEditStarterCode(nextLabContent.starterCode)
+    setEditingTitle(false)
+    setEditingDescription(false)
+    setEditingStarterCode(false)
     setConsoleOutput('')
     setSteps(0)
     setRegisters({
@@ -535,6 +583,20 @@ export default function LabPage() {
       wasmEmuRef.current = null
     }
   }, [labNum]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const onStorageUpdate = (event: StorageEvent) => {
+      if (event.key !== 'labContentOverridesV1') return
+      const nextLabContent = getLabContent(labNum)
+      setLabConfig(nextLabContent)
+      if (!editingTitle) setEditTitle(nextLabContent.title)
+      if (!editingDescription) setEditDescription(nextLabContent.description)
+      if (!editingStarterCode) setEditStarterCode(nextLabContent.starterCode)
+    }
+
+    window.addEventListener('storage', onStorageUpdate)
+    return () => window.removeEventListener('storage', onStorageUpdate)
+  }, [labNum, editingDescription, editingStarterCode, editingTitle])
 
   // Load WASM once on mount
   useEffect(() => {
@@ -654,6 +716,62 @@ export default function LabPage() {
     setMemoryView(Array(48).fill(0))
   }
 
+  function onLogout() {
+    localStorage.removeItem('userRole')
+    localStorage.removeItem('username')
+    document.cookie = 'canvasAuth=; Max-Age=0; path=/'
+    navigate('/login')
+  }
+
+  function saveLabContentChanges(content: {
+    title?: string
+    description?: string
+    starterCode?: string
+  }) {
+    if (userRole !== 'admin') return
+
+    const updated = saveLabContent(labNum, {
+      title: content.title ?? labConfig.title,
+      description: content.description ?? labConfig.description,
+      starterCode: content.starterCode ?? labConfig.starterCode,
+    })
+
+    setLabConfig(updated)
+    if (content.starterCode !== undefined) {
+      setCode(updated.starterCode)
+    }
+  }
+
+  function saveTitleEdit() {
+    saveLabContentChanges({ title: editTitle })
+    setEditingTitle(false)
+  }
+
+  function cancelTitleEdit() {
+    setEditTitle(labConfig.title)
+    setEditingTitle(false)
+  }
+
+  function saveDescriptionEdit() {
+    saveLabContentChanges({ description: editDescription })
+    setEditingDescription(false)
+  }
+
+  function cancelDescriptionEdit() {
+    setEditDescription(labConfig.description)
+    setEditingDescription(false)
+  }
+
+  function saveStarterCodeEdit() {
+    saveLabContentChanges({ starterCode: editStarterCode })
+    setEditingStarterCode(false)
+  }
+
+  function cancelStarterCodeEdit() {
+    setEditStarterCode(labConfig.starterCode)
+    setEditingStarterCode(false)
+  }
+
   function buildGradingResult(): GradingResult | null {
     if (!wasmModRef.current) return null
 
@@ -683,29 +801,89 @@ export default function LabPage() {
     }
   }
 
+  function handleStudentSubmit() {
+    const result = buildGradingResult()
+    if (!result) return null
+
+    if (userRole === 'student') {
+      saveStudentSubmission({
+        labId: labNum,
+        studentUsername: username || 'Unknown Student',
+        autoEarned: result.earned,
+        total: result.total,
+        details: result.details,
+      })
+    }
+
+    return result
+  }
+
   return (
     <div className="app-root">
       <header className="topbar">
         <div className="brand">ASU</div>
-        <div className="title">{config.title}</div>
+        <div className="title-wrap">
+          {!editingTitle && <div className="title">{labConfig.title}</div>}
+          {editingTitle && (
+            <div className="inline-editor-row title-inline-editor">
+              <input
+                className="inline-editor-input"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                aria-label="Edit lab title"
+              />
+              <button type="button" className="inline-save-btn" onClick={saveTitleEdit}>Save</button>
+              <button type="button" className="inline-cancel-btn" onClick={cancelTitleEdit}>Cancel</button>
+            </div>
+          )}
+          {userRole === 'admin' && !editingTitle && (
+            <PencilButton onClick={() => setEditingTitle(true)} label="Edit lab title" />
+          )}
+        </div>
+        <div style={{ marginLeft: 'auto', paddingRight: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.9rem' }}>
+          <span>
+            {userRole === 'admin' ? 'Instructor/Admin' : 'Student'}: {username}
+          </span>
+        </div>
         <div className="toolbar">
           <button onClick={onRun} className="primary">Run</button>
           <button onClick={onStep}>Step</button>
           <button onClick={onReset}>Reset</button>
+          <button onClick={onLogout} style={{ background: '#ff0000', color: '#ffffff' }}>Logout</button>
         </div>
       </header>
 
       <main className="main-grid">
         {/* Assembly Editor */}
         <section className="editor-pane">
-          <div className="editor-header">Assembly Editor</div>
+          <div className="editor-header editor-header-row">
+            <span>Assembly Editor</span>
+            {userRole === 'admin' && !editingStarterCode && (
+              <PencilButton onClick={() => {
+                setEditStarterCode(labConfig.starterCode)
+                setEditingStarterCode(true)
+              }} label="Edit starter code" />
+            )}
+          </div>
           <textarea
             className="editor"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
+            value={editingStarterCode ? editStarterCode : code}
+            onChange={(e) => {
+              if (editingStarterCode) {
+                setEditStarterCode(e.target.value)
+              } else {
+                setCode(e.target.value)
+              }
+            }}
             spellCheck={false}
-            aria-label="Assembly editor"
+            aria-label={editingStarterCode ? 'Lab starter code editor' : 'Assembly editor'}
           />
+          {editingStarterCode && userRole === 'admin' && (
+            <div className="inline-editor-actions">
+              <button type="button" className="inline-save-btn" onClick={saveStarterCodeEdit}>Save</button>
+              <button type="button" className="inline-cancel-btn" onClick={cancelStarterCodeEdit}>Cancel</button>
+            </div>
+          )}
         </section>
 
         {/* Right Panel */}
@@ -743,10 +921,39 @@ export default function LabPage() {
             ))}
           </div>
 
+          <div className="grading-panel">
+            <div className="panel-heading grading-desc-wrap" style={{ marginTop: 16 }}>
+              <span>Lab {labNum} Description</span>
+              {userRole === 'admin' && !editingDescription && (
+                <PencilButton onClick={() => {
+                  setEditDescription(labConfig.description)
+                  setEditingDescription(true)
+                }} label="Edit lab description" />
+              )}
+            </div>
+
+            {!editingDescription && <p className="grading-desc">{labConfig.description}</p>}
+
+            {userRole === 'admin' && editingDescription && (
+              <div className="inline-editor-block">
+                <textarea
+                  className="inline-editor-textarea"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  rows={8}
+                />
+                <div className="inline-editor-actions">
+                  <button type="button" className="inline-save-btn" onClick={saveDescriptionEdit}>Save</button>
+                  <button type="button" className="inline-cancel-btn" onClick={cancelDescriptionEdit}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <GradingPanel
             labId={labNum}
-            description={config.description}
-            onSubmit={buildGradingResult}
+            description=""
+            onSubmit={handleStudentSubmit}
           />
         </aside>
 

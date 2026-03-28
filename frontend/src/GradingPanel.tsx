@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 export interface GradingResult {
   earned: number
   total: number
@@ -5,15 +7,17 @@ export interface GradingResult {
   details: string[]
 }
 
-interface GradingPanelProps {
+export interface GradingPanelProps {
   labId: number
   description: string
   onSubmit: () => GradingResult | null
 }
 
-import { useState } from 'react'
-
-export default function GradingPanel({ labId, description, onSubmit }: GradingPanelProps) {
+export default function GradingPanel({
+  labId,
+  description,
+  onSubmit,
+}: GradingPanelProps) {
   const [result, setResult] = useState<GradingResult | null>(null)
   const [submitted, setSubmitted] = useState(false)
 
@@ -28,7 +32,7 @@ export default function GradingPanel({ labId, description, onSubmit }: GradingPa
       <div className="panel-heading" style={{ marginTop: 16 }}>
         Lab {labId} — Autograder
       </div>
-      <p className="grading-desc">{description}</p>
+      {description && <p className="grading-desc">{description}</p>}
 
       <button className="submit-btn" onClick={handleSubmit}>
         Submit for Grading

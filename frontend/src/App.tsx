@@ -374,6 +374,13 @@ function onOpenFileClick() {
   fileInputRef.current?.click();
 }
 
+function onLogout() {
+  localStorage.removeItem('userRole')
+  localStorage.removeItem('username')
+  document.cookie = 'canvasAuth=; Max-Age=0; path=/'
+  navigate('/login')
+}
+
 async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
   const file = e.target.files?.[0];
   if (!file) return;
@@ -464,6 +471,7 @@ async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
           <button onClick={onRun} className="primary">Run</button>
           <button onClick={onStep}>Step</button>
           <button onClick={onReset}>Reset</button>
+          <button onClick={onLogout} style={{ background: '#ff0000', color: '#ffffff' }}>Logout</button>
         </div>
       </header>
 

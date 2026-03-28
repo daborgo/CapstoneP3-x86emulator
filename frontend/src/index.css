@@ -157,6 +157,16 @@ html, body, #root { height: 100vh; margin: 0; font-family: Inter, system-ui, Seg
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.title-inline-editor {
+  width: 100%;
+}
 .toolbar button {
   margin-left: 0.4rem;
   padding: 0.32rem 0.7rem;
@@ -209,6 +219,11 @@ html, body, #root { height: 100vh; margin: 0; font-family: Inter, system-ui, Seg
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+.editor-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 .editor {
   flex: 1;
   width: 100%;
@@ -247,6 +262,84 @@ html, body, #root { height: 100vh; margin: 0; font-family: Inter, system-ui, Seg
   font-size: 0.78rem;
   color: var(--muted-text);
   font-family: monospace;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid #d9dfea;
+  background: #fff;
+  color: #5f6677;
+}
+
+.icon-btn:hover {
+  background: #eef3ff;
+  border-color: #b9c5e4;
+}
+
+.icon-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+
+.inline-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-editor-input,
+.inline-editor-textarea {
+  width: 100%;
+  border: 1px solid #d9dfea;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  background: #fff;
+  color: #1f2530;
+}
+
+.inline-editor-textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.inline-editor-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid #e7ebf4;
+  background: #fbfcff;
+}
+
+.inline-save-btn,
+.inline-cancel-btn {
+  border: 1px solid #d4dbeb;
+  background: #fff;
+  color: #2d3447;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 5px 10px;
+}
+
+.inline-save-btn {
+  background: var(--maroon);
+  border-color: transparent;
+  color: #fff;
+}
+
+.inline-save-btn:hover {
+  background: var(--maroon-light);
+}
+
+.inline-cancel-btn:hover {
+  background: #f3f6fb;
 }
 
 .panel-heading {
@@ -323,6 +416,21 @@ html, body, #root { height: 100vh; margin: 0; font-family: Inter, system-ui, Seg
   color: #555;
   line-height: 1.5;
   margin: 5px 0 10px;
+}
+
+.grading-desc-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.grading-desc-wrap .grading-desc {
+  flex: 1;
+  margin-top: 0;
+}
+
+.inline-editor-block {
+  margin: 4px 0 10px;
 }
 .submit-btn {
   width: 100%;

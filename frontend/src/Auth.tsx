@@ -15,7 +15,6 @@ export default function Auth() {
       navigate('/lab1')
       return
     }
-    navigate('/login')
   }, [navigate])
 
   return (
