@@ -348,7 +348,7 @@ export default function App() {
 
       try {
         emu.load_program(bytes, LOAD_ADDR)
-        setConsoleOutput((s) => s + `Created new emulator instance and loaded ${bytes.length} bytes\n`)
+        setConsoleOutput((s) => s + `Assembled ${bytes.length} bytes. Running...\n`)
       } catch (e) {
         setConsoleOutput((s) => s + `WASM load error: ${String(e)}\n`)
         return
