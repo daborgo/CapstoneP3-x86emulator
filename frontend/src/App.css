@@ -21,3 +21,13 @@ a { color: #646cff; text-decoration:none }
 textarea.editor:focus-visible {
   outline: none;
 }
+
+.copy-btn {
+  margin-left: auto;
+}
+
+.console-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
