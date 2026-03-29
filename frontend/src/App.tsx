@@ -364,13 +364,7 @@ export default function App() {
               Copy
             </button>
           </div>
-          <textarea
-            className="console"
-            value={consoleOutput}
-            readOnly
-            spellCheck={false}
-            aria-label="Console output"
-          />
+          <pre className="console-output" role="log" aria-live="polite">{consoleOutput}</pre>
         </section>
       </main>
     </div>
