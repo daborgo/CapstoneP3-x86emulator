@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './App.css'
 
 // Types for the generated WASM bindings
@@ -22,37 +23,54 @@ export default function App() {
   const [consoleOutput, setConsoleOutput] = useState('Hello, World!\n')
   const [steps, setSteps] = useState(0)
   const [wasmReady, setWasmReady] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [username, setUsername] = useState<string | null>(null)
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
   const LOAD_ADDR = 0x00001000
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const navigate = useNavigate()
 
 
   // placeholder registers
   const [registers, setRegisters] = useState({
     eip: '0x00001000',
-    eax: '0x00000078',
+    eax: '0x00000000',
     ebx: '0x00000000',
     ecx: '0x00000000',
     edx: '0x00000000',
-    ebp: '0xFFFF0000',
-    esp: '0xFFFF0000',
+    ebp: '0x00f00000',
+    esp: '0x00f00000',
     esi: '0x00000000',
     edi: '0x00000000',
   })
 
   // placeholder flags
   const [flags, setFlags] = useState({
-    zf: 1,
+    zf: 0,
     sf: 0,
     of: 0,
     cf: 0,
     df: 0,
-    pf: 1,
+    pf: 0,
   })
 
   // Memory view (visualization grid). 48 bytes (6 rows × 8 cols) to match mockup.
   const [memoryView, setMemoryView] = useState<number[]>(Array(48).fill(0))
+
+  // Check auth and role on mount
+  useEffect(() => {
+    const role = localStorage.getItem('userRole')
+    const user = localStorage.getItem('username')
+
+    if (!role) {
+      navigate('/login')
+      return
+    }
+
+    setUserRole(role)
+    setUsername(user || 'User')
+  }, [navigate])
 
   // 1. cd core   /   wasm-pack build --target web --out-dir ../frontend/src/wasm/pkg --dev --out-name web_x86_cor
   // 2. cd frontend   /   npm install   /   npm run dev
@@ -321,13 +339,40 @@ export default function App() {
       const { Emulator } = wasmModRef.current
       const emu = new Emulator()
       wasmEmuRef.current = emu
-      setConsoleOutput((s) => s + 'Created new emulator instance\n')
+
+      const { bytes, errors } = assemble(code)
+      if (errors.length) {
+        setConsoleOutput((s) => s + errors.map((e) => `ASM error: ${e}`).join('\n') + '\n')
+        return
+      }
+
+      try {
+        emu.load_program(bytes, LOAD_ADDR)
+        setConsoleOutput((s) => s + `Created new emulator instance and loaded ${bytes.length} bytes\n`)
+      } catch (e) {
+        setConsoleOutput((s) => s + `WASM load error: ${String(e)}\n`)
+        return
+      }
     }
 
     const emu = wasmEmuRef.current
     try {
-      emu.step()
-      const stepCount = Number(emu.get_steps())
+      const before = Number(emu.get_steps())
+      let stepCount = Number(emu.step())
+
+      if (stepCount === before) {
+        const { bytes, errors } = assemble(code)
+        if (errors.length) {
+          setConsoleOutput((s) => s + errors.map((e) => `ASM error: ${e}`).join('\n') + '\n')
+          return
+        }
+
+        emu.reset()
+        emu.load_program(bytes, LOAD_ADDR)
+        stepCount = Number(emu.step())
+        setConsoleOutput((s) => s + `reload step error\n`)
+      }
+
       setSteps(stepCount)
       setConsoleOutput((s) => s + `Step ${stepCount}\n`)
       refreshRegistersFromWasm(emu)
@@ -337,23 +382,41 @@ export default function App() {
   }
 
   function onReset() {
-    const emu = wasmEmuRef.current
-    if (emu && wasmReady) {
+    if (wasmEmuRef.current) {
       try {
-        emu.reset()
-        setSteps(0)
-        setConsoleOutput('')
-        refreshRegistersFromWasm(emu)
-      } catch (e) {
-        setConsoleOutput((s) => s + `WASM reset error: ${String(e)}\n`)
+        wasmEmuRef.current.reset()
+      } catch (_) {
+        // nothing for now?
       }
-    } else {
-      setConsoleOutput((s) => s + 'WASM not ready\n')
+      wasmEmuRef.current = null
     }
+
+    setSteps(0)
+    setConsoleOutput('')
+    setRegisters({
+      eip: '0x00001000',
+      eax: '0x00000000',
+      ebx: '0x00000000',
+      ecx: '0x00000000',
+      edx: '0x00000000',
+      ebp: '0x00f00000',
+      esp: '0x00f00000',
+      esi: '0x00000000',
+      edi: '0x00000000',
+    })
+    setFlags({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
+    setMemoryView(Array(48).fill(0))
   }
 
 function onOpenFileClick() {
   fileInputRef.current?.click();
+}
+
+function onLogout() {
+  localStorage.removeItem('userRole')
+  localStorage.removeItem('username')
+  document.cookie = 'canvasAuth=; Max-Age=0; path=/'
+  navigate('/login')
 }
 
 async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -405,11 +468,10 @@ async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
       // Try to read a small memory window starting at LOAD_ADDR if emulator exposes read_u8
       try {
         const emuUnknown = emu as unknown as { read_u8?: (addr: number) => number }
-        const readFn = emuUnknown.read_u8
-        if (typeof readFn === 'function') {
+        if (typeof emuUnknown.read_u8 === 'function') {
           const bytes: number[] = []
           for (let i = 0; i < memoryView.length; i++) {
-            const v = readFn(LOAD_ADDR + i)
+            const v = emuUnknown.read_u8(LOAD_ADDR + i)
             bytes.push(Number(v) & 0xFF)
           }
           setMemoryView(bytes)
@@ -427,6 +489,11 @@ async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
       <header className="topbar">
         <div className="brand">ASU</div>
         <div className="title">Online Assembly x86 Emulator</div>
+        <div style={{ marginLeft: 'auto', paddingRight: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.9rem' }}>
+          <span>
+            {userRole === 'admin' ? 'Instructor/Admin' : 'Student'}: {username}
+          </span>
+        </div>
         <div className="toolbar">
           <button onClick={onOpenFileClick}>Open</button>
           <input
@@ -441,6 +508,7 @@ async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
           <button onClick={onRun} className="primary">Run</button>
           <button onClick={onStep}>Step</button>
           <button onClick={onReset}>Reset</button>
+          <button onClick={onLogout} style={{ background: '#ff0000', color: '#ffffff' }}>Logout</button>
         </div>
       </header>
 

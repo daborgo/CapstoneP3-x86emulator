@@ -1,7 +1,7 @@
-use web_x86_core::instructions::sub::{sub8, sub16, sub32, CpuFlags, execute};
-use web_x86_core::cpu::{CPU, RegisterName};
-use web_x86_core::memory::Memory;
-use web_x86_core::decoder::{Instruction, Opcode, Operand};
+use core::instructions::sub::{sub8, sub16, sub32, CpuFlags, execute};
+use core::cpu::{CPU, RegisterName};
+use core::memory::Memory;
+use core::decoder::{Instruction, Opcode, Operand};
 
 // Unit tests for low-level sub helpers
 #[test]

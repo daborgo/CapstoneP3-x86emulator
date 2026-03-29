@@ -12,7 +12,7 @@ export default function Auth() {
       .includes('canvasAuth=valid')
 
     if (hasValidCookie) {
-      navigate('/emulator')
+      navigate('/lab1')
       return
     }
   }, [navigate])
