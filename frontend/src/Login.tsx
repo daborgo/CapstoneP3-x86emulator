@@ -20,13 +20,14 @@ export default function Login() {
     if (username && password) {
       localStorage.setItem('userRole', role)
       localStorage.setItem('username', username)
-      navigate('/lab1')
+      navigate('/home')
     }
   }
 
   const handleSsoLogin = () => {
     localStorage.setItem('userRole', 'student')
-    navigate('/auth')
+    localStorage.setItem('username', 'SSO User')
+    navigate('/home')
   }
 
   return (

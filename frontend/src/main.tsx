@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import Login from './Login.tsx'
 import Auth from './Auth.tsx'
+import Home from './Home.tsx'
 import Sidebar from './Sidebar.tsx'
 import LabPage from './LabPage.tsx'
 import InstructorSubmissions from './InstructorSubmissions.tsx'
@@ -27,6 +28,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/auth" element={<Auth />} />
+        <Route path="/home" element={<Home />} />
         <Route path="/emulator" element={<App />} />
         <Route path="/submissions" element={<InstructorSubmissions />} />
         <Route element={<LabLayout />}>
