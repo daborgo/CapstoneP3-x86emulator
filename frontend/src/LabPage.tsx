@@ -526,8 +526,16 @@ export default function LabPage() {
   const [editDescription, setEditDescription] = useState('')
   const [editStarterCode, setEditStarterCode] = useState('')
 
+  // Breakpoints and debugging
+  const [breakpoints, setBreakpoints] = useState<Set<number>>(new Set())
+  const [currentLine, setCurrentLine] = useState<number | null>(null)
+  const [paused, setPaused] = useState(false)
+
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
+  const editorScrollRef = useRef<HTMLTextAreaElement | null>(null)
+  const gutterScrollRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const [registers, setRegisters] = useState({
     eip: '0x00001000',
@@ -535,14 +543,15 @@ export default function LabPage() {
     ebx: '0x00000000',
     ecx: '0x00000000',
     edx: '0x00000000',
-    ebp: '0x00F00000',
-    esp: '0x00F00000',
+    ebp: '0x00f00000',
+    esp: '0x00f00000',
     esi: '0x00000000',
     edi: '0x00000000',
   })
 
   const [flags, setFlags] = useState({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
   const [memoryView, setMemoryView] = useState<number[]>(Array(48).fill(0))
+  const lines = code.split('\n')
 
   // Check auth and role on mount
   useEffect(() => {
@@ -573,8 +582,8 @@ export default function LabPage() {
     setSteps(0)
     setRegisters({
       eip: '0x00001000', eax: '0x00000000', ebx: '0x00000000',
-      ecx: '0x00000000', edx: '0x00000000', ebp: '0x00F00000',
-      esp: '0x00F00000', esi: '0x00000000', edi: '0x00000000',
+      ecx: '0x00000000', edx: '0x00000000', ebp: '0x00f00000',
+      esp: '0x00f00000', esi: '0x00000000', edi: '0x00000000',
     })
     setFlags({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
     setMemoryView(Array(48).fill(0))
@@ -657,11 +666,30 @@ export default function LabPage() {
     try {
       emu.load_program(bytes, LOAD_ADDR)
       setConsoleOutput((s) => s + `Assembled ${bytes.length} bytes. Running...\n`)
-      for (let i = 0; i < 1000; i++) emu.step()
+
+      const MAX_STEPS = 256
+      let hitBreakpoint = false
+
+      for (let i = 0; i < MAX_STEPS; i++) {
+        const nextLine = i + 1
+        if (breakpoints.has(nextLine)) {
+          setCurrentLine(nextLine)
+          setPaused(true)
+          setConsoleOutput((s) => s + `Paused at breakpoint on line ${nextLine}\n`)
+          hitBreakpoint = true
+          break
+        }
+        emu.step()
+      }
+
       const total = Number(emu.get_steps?.() ?? 0)
       setSteps(total)
+      setCurrentLine(total + 1)
+      if (!hitBreakpoint) {
+        setPaused(false)
+        setConsoleOutput((s) => s + `Run complete. Steps=${total}\n`)
+      }
       refreshRegistersFromWasm(emu)
-      setConsoleOutput((s) => s + `Run complete. Steps: ${total}\n`)
     } catch (e) {
       setConsoleOutput((s) => s + `Runtime error: ${String(e)}\n`)
     }
@@ -689,12 +717,39 @@ export default function LabPage() {
         return
       }
     }
+
+    const emu = wasmEmuRef.current
     try {
-      wasmEmuRef.current.step()
-      const n = Number(wasmEmuRef.current.get_steps())
-      setSteps(n)
-      refreshRegistersFromWasm(wasmEmuRef.current)
-      setConsoleOutput((s) => s + `Step ${n}: EIP=${registers.eip}\n`)
+      const nextLine = steps + 1
+
+      if (breakpoints.has(nextLine)) {
+        setCurrentLine(nextLine)
+        setPaused(true)
+        setConsoleOutput((s) => s + `Paused at breakpoint on line ${nextLine}\n`)
+        return
+      }
+
+      const before = Number(emu.get_steps())
+      let stepCount = Number(emu.step())
+
+      if (stepCount === before) {
+        const { bytes, errors } = assemble(code)
+        if (errors.length) {
+          setConsoleOutput((s) => s + errors.map((e) => `ASM error: ${e}`).join('\n') + '\n')
+          return
+        }
+
+        emu.reset()
+        emu.load_program(bytes, LOAD_ADDR)
+        stepCount = Number(emu.step())
+        setConsoleOutput((s) => s + `reload step error\n`)
+      }
+
+      setSteps(stepCount)
+      setCurrentLine(stepCount + 1)
+      setPaused(false)
+      setConsoleOutput((s) => s + `Step ${stepCount}\n`)
+      refreshRegistersFromWasm(emu)
     } catch (e) {
       setConsoleOutput((s) => s + `Step error: ${String(e)}\n`)
     }
@@ -702,18 +757,116 @@ export default function LabPage() {
 
   function onReset() {
     if (wasmEmuRef.current) {
-      try { wasmEmuRef.current.reset() } catch (_) { /* ignore */ }
+      try {
+        wasmEmuRef.current.reset()
+        setSteps(0)
+        setPaused(false)
+        setCurrentLine(null)
+        setBreakpoints(new Set())
+        setConsoleOutput('')
+        refreshRegistersFromWasm(wasmEmuRef.current)
+      } catch (e) {
+        setConsoleOutput((s) => s + `WASM reset error: ${String(e)}\n`)
+      }
       wasmEmuRef.current = null
     }
+
     setSteps(0)
     setConsoleOutput('')
     setRegisters({
-      eip: '0x00001000', eax: '0x00000000', ebx: '0x00000000',
-      ecx: '0x00000000', edx: '0x00000000', ebp: '0x00F00000',
-      esp: '0x00F00000', esi: '0x00000000', edi: '0x00000000',
+      eip: '0x00001000',
+      eax: '0x00000000',
+      ebx: '0x00000000',
+      ecx: '0x00000000',
+      edx: '0x00000000',
+      ebp: '0x00f00000',
+      esp: '0x00f00000',
+      esi: '0x00000000',
+      edi: '0x00000000',
     })
     setFlags({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
     setMemoryView(Array(48).fill(0))
+  }
+
+  function onContinue() {
+    if (!wasmEmuRef.current) {
+      setConsoleOutput((s) => s + 'No emulator instance to continue\n')
+      return
+    }
+
+    const emu = wasmEmuRef.current
+
+    try {
+      setPaused(false)
+
+      emu.step() // step once to move off breakpoint
+
+      const steppedLine = Number(emu.get_steps()) + 1
+      setSteps(Number(emu.get_steps()))
+      setCurrentLine(steppedLine)
+
+      const MAX_STEPS = 256
+      let hitBreakpoint = false
+
+      for (let i = 0; i < MAX_STEPS; i++) {
+        const nextLine = Number(emu.get_steps()) + 1
+
+        if (breakpoints.has(nextLine)) {
+          setCurrentLine(nextLine)
+          setPaused(true)
+          setConsoleOutput((s) => s + `Paused at breakpoint on line ${nextLine}\n`)
+          hitBreakpoint = true
+          break
+        }
+
+        emu.step()
+      }
+
+      const stepCount = Number(emu.get_steps())
+      setSteps(stepCount)
+      setCurrentLine(stepCount + 1)
+
+      if (!hitBreakpoint) {
+        setPaused(false)
+        setConsoleOutput((s) => s + `Continue complete. Steps=${stepCount}\n`)
+      }
+
+      refreshRegistersFromWasm(emu)
+    } catch (e) {
+      setConsoleOutput((s) => s + `WASM continue error: ${String(e)}\n`)
+    }
+  }
+
+  function onOpenFileClick() {
+    fileInputRef.current?.click()
+  }
+
+  async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      setCode(text)
+      setConsoleOutput((s) => s + `Opened file: ${file.name}\n`)
+    } catch (err) {
+      console.error(err)
+      setConsoleOutput((s) => s + `Open file error: ${String(err)}\n`)
+    } finally {
+      e.target.value = ''
+    }
+  }
+
+  function toggleBreakpoint(addr: number) {
+    setBreakpoints((prev) => {
+      const next = new Set(prev)
+      if (next.has(addr)) {
+        next.delete(addr)
+      } else {
+        next.add(addr)
+      }
+      return next
+    })
   }
 
   function onLogout() {
@@ -846,8 +999,26 @@ export default function LabPage() {
           </span>
         </div>
         <div className="toolbar">
+          <button onClick={onOpenFileClick}>Open</button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.asm"
+            onChange={onFileSelected}
+            style={{ display: 'none' }}
+          />
           <button onClick={onRun} className="primary">Run</button>
           <button onClick={onStep}>Step</button>
+          <button onClick={onContinue} disabled={!paused}>Continue</button>
+          <button
+            onClick={() => {
+              setBreakpoints(new Set())
+              setCurrentLine(null)
+              setPaused(false)
+            }}
+          >
+            Clear Breakpoints
+          </button>
           <button onClick={onReset}>Reset</button>
           <button onClick={onLogout} style={{ background: '#ff0000', color: '#ffffff' }}>Logout</button>
         </div>
@@ -865,19 +1036,54 @@ export default function LabPage() {
               }} label="Edit starter code" />
             )}
           </div>
-          <textarea
-            className="editor"
-            value={editingStarterCode ? editStarterCode : code}
-            onChange={(e) => {
-              if (editingStarterCode) {
-                setEditStarterCode(e.target.value)
-              } else {
-                setCode(e.target.value)
-              }
-            }}
-            spellCheck={false}
-            aria-label={editingStarterCode ? 'Lab starter code editor' : 'Assembly editor'}
-          />
+          <div className='editor-wrap'>
+            <div
+              className='gutter'
+              ref={gutterScrollRef}
+              aria-label="Breakpoint gutter"
+            >
+              {lines.map((_, idx) => {
+                const lineNo = idx + 1
+                const hasBreakpoint = breakpoints.has(lineNo)
+                return (
+                  <div
+                    key={lineNo}
+                    className={`gutter-line
+                      ${currentLine === lineNo ? 'current-line' : ''}
+                      ${currentLine === lineNo && breakpoints.has(lineNo) ? 'break-hit' : ''}
+                    `}
+                    onClick={() => toggleBreakpoint(lineNo)}
+                    title={hasBreakpoint ? `Remove breakpoint at line ${lineNo}` : `Add breakpoint at line ${lineNo}`}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <span className={`bp-dot ${hasBreakpoint ? 'on' : ''}`} />
+                    <span className="line-no">{lineNo}</span>
+                  </div>
+                )
+              })}
+            </div>
+            <textarea
+              className="editor"
+              ref={editorScrollRef}
+              value={editingStarterCode ? editStarterCode : code}
+              onChange={(e) => {
+                if (editingStarterCode) {
+                  setEditStarterCode(e.target.value)
+                } else {
+                  setCode(e.target.value)
+                }
+              }}
+              onScroll={(e) => {
+                const el = e.currentTarget
+                if (gutterScrollRef.current) {
+                  gutterScrollRef.current.scrollTop = el.scrollTop
+                }
+              }}
+              spellCheck={false}
+              aria-label={editingStarterCode ? 'Lab starter code editor' : 'Assembly editor'}
+            />
+          </div>
           {editingStarterCode && userRole === 'admin' && (
             <div className="inline-editor-actions">
               <button type="button" className="inline-save-btn" onClick={saveStarterCodeEdit}>Save</button>
@@ -888,7 +1094,7 @@ export default function LabPage() {
 
         {/* Right Panel */}
         <aside className="sidebar">
-          <p className="steps-counter">Steps: {steps}</p>
+          <p className="steps-counter">Steps: {steps}{paused ? ' (Paused at breakpoint)' : ''}</p>
 
           <div className="panel-heading">Registers</div>
           <div className="registers">
@@ -959,7 +1165,19 @@ export default function LabPage() {
 
         {/* Console */}
         <section className="console-pane">
-          <div className="console-header">Console</div>
+          <div className="console-header">Console
+            <button className='copy-btn' onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(consoleOutput)
+                setConsoleOutput((s) => s + 'Copied console to clipboard.\n')
+              }
+              catch {
+                //nothing
+              }
+            }} type = "button">
+              Copy
+            </button>
+          </div>
           <pre className="console-output" role="log" aria-live="polite">{consoleOutput}</pre>
         </section>
       </main>
