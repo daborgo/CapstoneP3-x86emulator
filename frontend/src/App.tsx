@@ -402,7 +402,7 @@ export default function App() {
         emu.reset()
         emu.load_program(bytes, LOAD_ADDR)
         stepCount = Number(emu.step())
-        setConsoleOutput((s) => s + `Reloaded and stepped.\n`)
+        setConsoleOutput((s) => s + `reload step error\n`)
       }
 
       setSteps(stepCount)

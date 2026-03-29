@@ -88,3 +88,13 @@ button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.copy-btn {
+  margin-left: auto;
+}
+
+.console-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
