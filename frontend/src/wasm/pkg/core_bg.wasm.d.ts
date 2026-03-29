@@ -1,0 +1,29 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_emulator_free: (a: number, b: number) => void;
+export const emulator_new: () => number;
+export const emulator_load_program: (a: number, b: number, c: number, d: number) => [number, number];
+export const emulator_step: (a: number) => bigint;
+export const emulator_get_steps: (a: number) => bigint;
+export const emulator_get_eax: (a: number) => number;
+export const emulator_get_ebx: (a: number) => number;
+export const emulator_get_ecx: (a: number) => number;
+export const emulator_get_edx: (a: number) => number;
+export const emulator_get_ebp: (a: number) => number;
+export const emulator_get_esi: (a: number) => number;
+export const emulator_get_edi: (a: number) => number;
+export const emulator_set_eax: (a: number, b: number) => void;
+export const emulator_get_eip: (a: number) => number;
+export const emulator_get_esp: (a: number) => number;
+export const emulator_get_cf: (a: number) => number;
+export const emulator_get_pf: (a: number) => number;
+export const emulator_get_af: (a: number) => number;
+export const emulator_get_zf: (a: number) => number;
+export const emulator_get_sf: (a: number) => number;
+export const emulator_get_of: (a: number) => number;
+export const emulator_reset: (a: number) => void;
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_start: () => void;

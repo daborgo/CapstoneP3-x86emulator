@@ -10,7 +10,8 @@ show_help() {
     echo -e "\033[32mWeb x86 Emulator - Docker Development Commands\033[0m"
     echo ""
     echo -e "\033[33mAvailable commands:\033[0m"
-    echo "  start     - Start development environment with hot reload"
+    echo "  frontend  - Start only the Vite frontend dev server (fast, no WASM rebuild)"
+    echo "  start     - Start full development environment with hot reload"
     echo "  stop      - Stop all containers"
     echo "  restart   - Restart development environment"
     echo "  build     - Build Docker images"
@@ -22,9 +23,21 @@ show_help() {
     echo "  help      - Show this help message"
     echo ""
     echo -e "\033[36mExamples:\033[0m"
+    echo "  ./scripts/docker-dev.sh frontend"
     echo "  ./scripts/docker-dev.sh start"
     echo "  ./scripts/docker-dev.sh logs"
     echo "  ./scripts/docker-dev.sh shell"
+}
+
+start_frontend() {
+    echo -e "\033[32m Starting Vite frontend dev server on http://localhost:5173 ...\033[0m"
+    FRONTEND_DIR="$(cd "$(dirname "$0")/.." && pwd)/frontend"
+    docker run --rm \
+        -v "$FRONTEND_DIR:/app" \
+        -w /app \
+        -p 5173:5173 \
+        node:20-slim \
+        npm run dev -- --host
 }
 
 start_dev() {
@@ -77,6 +90,9 @@ start_tools() {
 
 # Main command dispatcher
 case $COMMAND in
+    frontend)
+        start_frontend
+        ;;
     start)
         start_dev
         ;;

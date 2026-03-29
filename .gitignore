@@ -115,10 +115,10 @@ debug/
 release/
 
 # WASM build artifacts
-*.wasm
-*.js.map
-*.wasm.map
-.vuepress/dist
+# *.wasm
+# *.js.map
+# *.wasm.map
+# .vuepress/dist
 
 # vuepress v2.x temp and cache directory
 .temp
@@ -161,7 +161,7 @@ release/
 Cargo.lock
 
 # WASM build output
-/frontend/src/wasm/pkg/
+# /frontend/src/wasm/pkg/
 
 # Eclipse/IDE files
 .settings/
@@ -170,3 +170,4 @@ Cargo.lock
 .metadata/
 .idea/
 .vscode/
+core/target/.rustc_info.json

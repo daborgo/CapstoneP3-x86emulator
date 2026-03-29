@@ -1,27 +1,30 @@
-// ...existing code...
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './App.css'
 
 // Types for the generated WASM bindings
 type WasmModule = typeof import('./wasm/pkg/web_x86_core')
 type EmulatorApi = import('./wasm/pkg/web_x86_core').Emulator
 
-const SAMPLE_CODE = `; Simple test: MOV and PUSH
-MOV EAX, 0x42
-MOV EBX, 0x100
+const SAMPLE_CODE = `; Demo: MOV, PUSH, POP, SUB, and ADD
+MOV EAX, 0x100
+MOV EBX, 0x50
+ADD EAX, EBX
+SUB EAX, 0x30
 PUSH EAX
-PUSH EBX
+POP ECX
 ; After Run, check:
-; - EAX = 0x00000042
-; - EBX = 0x00000100
-; - ESP decreased by 8 (two pushes)
-; - EIP advanced past all instructions`
+; - EAX = 0x00000120 (0x100 + 0x50 - 0x30)
+; - ECX = 0x00000120 (popped from stack)
+; - EBX = 0x00000050 (unchanged)`
 
 export default function App() {
   const [code, setCode] = useState(SAMPLE_CODE)
   const [consoleOutput, setConsoleOutput] = useState('Hello, World!\n')
   const [steps, setSteps] = useState(0)
   const [wasmReady, setWasmReady] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [username, setUsername] = useState<string | null>(null)
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
   const LOAD_ADDR = 0x00001000
@@ -32,29 +35,49 @@ export default function App() {
   const editorScrollRef = useRef<HTMLTextAreaElement | null>(null)
   const gutterScrollRef = useRef<HTMLDivElement | null>(null)
   const lines = code.split('\n')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const navigate = useNavigate()
+
 
   // placeholder registers
   const [registers, setRegisters] = useState({
     eip: '0x00001000',
-    eax: '0x00000078',
+    eax: '0x00000000',
     ebx: '0x00000000',
     ecx: '0x00000000',
     edx: '0x00000000',
-    ebp: '0xFFFF0000',
-    esp: '0xFFFF0000',
+    ebp: '0x00f00000',
+    esp: '0x00f00000',
     esi: '0x00000000',
     edi: '0x00000000',
   })
 
   // placeholder flags
   const [flags, setFlags] = useState({
-    zf: 1,
+    zf: 0,
     sf: 0,
     of: 0,
     cf: 0,
     df: 0,
-    pf: 1,
+    pf: 0,
   })
+
+  // Memory view (visualization grid). 48 bytes (6 rows × 8 cols) to match mockup.
+  const [memoryView, setMemoryView] = useState<number[]>(Array(48).fill(0))
+
+  // Check auth and role on mount
+  useEffect(() => {
+    const role = localStorage.getItem('userRole')
+    const user = localStorage.getItem('username')
+
+    if (!role) {
+      navigate('/login')
+      return
+    }
+
+    setUserRole(role)
+    setUsername(user || 'User')
+  }, [navigate])
 
   // 1. cd core   /   wasm-pack build --target web --out-dir ../frontend/src/wasm/pkg --dev --out-name web_x86_cor
   // 2. cd frontend   /   npm install   /   npm run dev
@@ -184,6 +207,90 @@ export default function App() {
         } else {
           out.push(0xE9, rel & 0xFF, (rel >>> 8) & 0xFF, (rel >>> 16) & 0xFF, (rel >>> 24) & 0xFF)
         }
+      } else if (op === 'POP') {
+        if (parts.length !== 2) {
+          errors.push(`Line ${i + 1}: POP expects 1 register operand`)
+          continue
+        }
+        const r = parts[1].toUpperCase()
+        const idx = regIndex(r)
+        if (idx < 0) {
+          errors.push(`Line ${i + 1}: Unsupported register '${r}'`)
+          continue
+        }
+        // POP register: opcodes 0x58..0x5F
+        out.push(0x58 + idx)
+      } else if (op === 'SUB') {
+        if (parts.length !== 3) {
+          errors.push(`Line ${i + 1}: SUB expects 2 operands`)
+          continue
+        }
+        const dst = parts[1].toUpperCase()
+        const dstIdx = regIndex(dst)
+        if (dstIdx < 0) {
+          errors.push(`Line ${i + 1}: Unsupported destination register '${dst}'`)
+          continue
+        }
+        
+        // Check if source is register or immediate
+        const srcReg = parts[2].toUpperCase()
+        const srcIdx = regIndex(srcReg)
+        
+        if (srcIdx >= 0) {
+          // SUB reg, reg: opcode 0x29 + ModR/M byte
+          // ModR/M: 11 dst src (both in register mode)
+          const modrm = 0xC0 | (srcIdx << 3) | dstIdx
+          out.push(0x29, modrm)
+        } else {
+          // SUB reg, imm: opcode 0x81 + ModR/M byte (reg field = 5 for SUB) + imm32
+          const imm = toNum(parts[2])
+          if (imm == null) {
+            errors.push(`Line ${i + 1}: Expected register or immediate (hex like 0x123 or decimal)`)
+            continue
+          }
+          // ModR/M: 11 101 dst (register mode, SUB opcode extension /5)
+          const modrm = 0xE8 | dstIdx
+          out.push(0x81, modrm, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
+        }
+      } else if (op === 'ADD') {
+        if (parts.length !== 3) {
+          errors.push(`Line ${i + 1}: ADD expects 2 operands`)
+          continue
+        }
+        const dst = parts[1].toUpperCase()
+        const dstIdx = regIndex(dst)
+        if (dstIdx < 0) {
+          errors.push(`Line ${i + 1}: Unsupported destination register '${dst}'`)
+          continue
+        }
+        
+        // Check if source is register or immediate
+        const srcReg = parts[2].toUpperCase()
+        const srcIdx = regIndex(srcReg)
+        
+        if (srcIdx >= 0) {
+          // ADD reg, reg: opcode 0x01 + ModR/M byte
+          // ModR/M: 11 src dst (both in register mode)
+          const modrm = 0xC0 | (srcIdx << 3) | dstIdx
+          out.push(0x01, modrm)
+        } else {
+          // ADD reg, imm: opcode 0x81 + ModR/M byte (reg field = 0 for ADD) + imm32
+          const imm = toNum(parts[2])
+          if (imm == null) {
+            errors.push(`Line ${i + 1}: Expected register or immediate (hex like 0x123 or decimal)`)
+            continue
+          }
+          // ModR/M: 11 000 dst (register mode, ADD opcode extension /0)
+          const modrm = 0xC0 | dstIdx
+          out.push(0x81, modrm, imm & 0xFF, (imm >>> 8) & 0xFF, (imm >>> 16) & 0xFF, (imm >>> 24) & 0xFF)
+        }
+      } else if (op === 'RET') {
+        if (parts.length !== 1) {
+          errors.push(`Line ${i + 1}: RET expects no operands`)
+          continue
+        }
+        // RET (near return): opcode 0xC3
+        out.push(0xC3)
       } else {
         errors.push(`Line ${i + 1}: Unknown or unsupported mnemonic '${op}'`)
       }
@@ -255,7 +362,20 @@ export default function App() {
       const { Emulator } = wasmModRef.current
       const emu = new Emulator()
       wasmEmuRef.current = emu
-      setConsoleOutput((s) => s + 'Created new emulator instance\n')
+
+      const { bytes, errors } = assemble(code)
+      if (errors.length) {
+        setConsoleOutput((s) => s + errors.map((e) => `ASM error: ${e}`).join('\n') + '\n')
+        return
+      }
+
+      try {
+        emu.load_program(bytes, LOAD_ADDR)
+        setConsoleOutput((s) => s + `Assembled ${bytes.length} bytes. Running...\n`)
+      } catch (e) {
+        setConsoleOutput((s) => s + `WASM load error: ${String(e)}\n`)
+        return
+      }
     }
 
     const emu = wasmEmuRef.current
@@ -269,8 +389,22 @@ export default function App() {
         return
       }
 
-      emu.step()
-      const stepCount = Number(emu.get_steps())
+      const before = Number(emu.get_steps())
+      let stepCount = Number(emu.step())
+
+      if (stepCount === before) {
+        const { bytes, errors } = assemble(code)
+        if (errors.length) {
+          setConsoleOutput((s) => s + errors.map((e) => `ASM error: ${e}`).join('\n') + '\n')
+          return
+        }
+
+        emu.reset()
+        emu.load_program(bytes, LOAD_ADDR)
+        stepCount = Number(emu.step())
+        setConsoleOutput((s) => s + `Reloaded and stepped.\n`)
+      }
+
       setSteps(stepCount)
       setCurrentLine(stepCount + 1)
       setPaused(false)
@@ -331,23 +465,64 @@ export default function App() {
   }
 
   function onReset() {
-    const emu = wasmEmuRef.current
-    if (emu && wasmReady) {
+    if (wasmEmuRef.current) {
       try {
-        emu.reset()
+        wasmEmuRef.current.reset()
         setSteps(0)
         setPaused(false)
         setCurrentLine(null)
         setBreakpoints(new Set())
         setConsoleOutput('')
-        refreshRegistersFromWasm(emu)
+        refreshRegistersFromWasm(wasmEmuRef.current)
       } catch (e) {
         setConsoleOutput((s) => s + `WASM reset error: ${String(e)}\n`)
       }
-    } else {
-      setConsoleOutput((s) => s + 'WASM not ready\n')
+      wasmEmuRef.current = null
     }
+
+    setSteps(0)
+    setConsoleOutput('')
+    setRegisters({
+      eip: '0x00001000',
+      eax: '0x00000000',
+      ebx: '0x00000000',
+      ecx: '0x00000000',
+      edx: '0x00000000',
+      ebp: '0x00f00000',
+      esp: '0x00f00000',
+      esi: '0x00000000',
+      edi: '0x00000000',
+    })
+    setFlags({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
+    setMemoryView(Array(48).fill(0))
   }
+
+function onOpenFileClick() {
+  fileInputRef.current?.click();
+}
+
+function onLogout() {
+  localStorage.removeItem('userRole')
+  localStorage.removeItem('username')
+  document.cookie = 'canvasAuth=; Max-Age=0; path=/'
+  navigate('/login')
+}
+
+async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    setCode(text); // loads into your Assembly Editor textarea
+    setConsoleOutput((s) => s + `Opened file: ${file.name}\n`);
+  } catch (err) {
+    console.error(err);
+    setConsoleOutput((s) => s + `Open file error: ${String(err)}\n`);
+  } finally {
+    e.target.value = ""; // allows selecting same file again
+  }
+}
 
   function refreshRegistersFromWasm(emu: EmulatorApi) {
     try {
@@ -378,6 +553,21 @@ export default function App() {
 
       // update flags panel
       setFlags({ zf, sf, of, cf, df, pf })
+
+      // Try to read a small memory window starting at LOAD_ADDR if emulator exposes read_u8
+      try {
+        const emuUnknown = emu as unknown as { read_u8?: (addr: number) => number }
+        if (typeof emuUnknown.read_u8 === 'function') {
+          const bytes: number[] = []
+          for (let i = 0; i < memoryView.length; i++) {
+            const v = emuUnknown.read_u8(LOAD_ADDR + i)
+            bytes.push(Number(v) & 0xFF)
+          }
+          setMemoryView(bytes)
+        }
+      } catch (e) {
+        setConsoleOutput((s) => s + `${String(e)}\n`)
+      }
     } catch (e) {
       setConsoleOutput((s) => s + `WASM refresh error: ${String(e)}\n`)
     }
@@ -401,8 +591,20 @@ export default function App() {
       <header className="topbar">
         <div className="brand">ASU</div>
         <div className="title">Online Assembly x86 Emulator</div>
+        <div style={{ marginLeft: 'auto', paddingRight: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.9rem' }}>
+          <span>
+            {userRole === 'admin' ? 'Instructor/Admin' : 'Student'}: {username}
+          </span>
+        </div>
         <div className="toolbar">
-          <button>Open</button>
+          <button onClick={onOpenFileClick}>Open</button>
+          <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt"
+          onChange={onFileSelected}
+          style={{ display: "none" }}
+        />
           <button>Save</button>
           <button>Save as</button>
           <button onClick={onRun} className="primary">Run</button>
@@ -418,6 +620,7 @@ export default function App() {
             Clear Breakpoints
           </button>          
           <button onClick={onReset}>Reset</button>
+          <button onClick={onLogout} style={{ background: '#ff0000', color: '#ffffff' }}>Logout</button>
         </div>
       </header>
 
@@ -492,10 +695,41 @@ export default function App() {
             <div className="reg-row"><span className="reg-name">DF</span><span className="reg-val">{flags.df}</span></div>
             <div className="reg-row"><span className="reg-name">PF</span><span className="reg-val">{flags.pf}</span></div>
           </div>
+
+          <div className="panel-heading" style={{ marginTop: 12 }}>Memory</div>
+          <div className="memory-grid" role="grid" aria-label="Memory view" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6 }}>
+            {memoryView.map((b, i) => {
+              const hex = b.toString(16).toUpperCase().padStart(1, '0')
+              return (
+                <div key={i} className="mem-cell" role="gridcell" aria-label={`Byte ${i}`} style={{
+                  border: '1px solid #ddd',
+                  borderRadius: 6,
+                  padding: '6px 8px',
+                  textAlign: 'center',
+                  fontFamily: 'monospace',
+                  background: '#fff'
+                }}>
+                  {hex}
+                </div>
+              )
+            })}
+          </div>
         </aside>
 
         <section className="console-pane">
-          <div className="console-header">Console</div>
+          <div className="console-header">Console
+            <button className='copy-btn' onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(consoleOutput)
+                setConsoleOutput((s) => s + 'Copied console to clipboard.\n')
+              }
+              catch {
+                //nothing
+              }
+            }} type = "button">
+              Copy
+            </button>
+          </div>
           <pre className="console-output" role="log" aria-live="polite">{consoleOutput}</pre>
         </section>
       </main>
