@@ -22,6 +22,73 @@ textarea.editor:focus-visible {
   outline: none;
 }
 
+.editor-wrap {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  height: 100%;
+}
+
+.gutter {
+  overflow: hidden; 
+  user-select: none;
+  background: #ffffff;
+  border-right: 1px solid rgba(255,255,255,0.08);
+  font-family: monospace;
+  font-size: 12px;
+  padding-top: 12px;
+}
+
+.gutter-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 18px;
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+.bp-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.35);
+  opacity: 0.35;
+}
+
+.bp-dot.on {
+  opacity: 1;
+  border-color: transparent;
+  background: #ff4d4d;
+}
+
+.line-no {
+  opacity: 0.6;
+  min-width: 24px;
+  text-align: right;
+}
+
+.editor {
+  line-height: 18px; 
+}
+
+.gutter-line.current-line {
+  background: rgba(255, 255, 0, 0.15);
+}
+
+.gutter-line.break-hit {
+  background: rgba(255, 0, 0, 0.35);
+}
+
+.gutter-line.break-hit .bp-dot {
+  background: red;
+  box-shadow: 0 0 6px red;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .copy-btn {
   margin-left: auto;
 }
