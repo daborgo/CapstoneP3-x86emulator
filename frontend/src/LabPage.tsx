@@ -8,6 +8,22 @@ import './App.css'
 type WasmModule = typeof import('./wasm/pkg/web_x86_core')
 type EmulatorApi = import('./wasm/pkg/web_x86_core').Emulator
 
+const REGISTER_KEYS = ['eip', 'eax', 'ebx', 'ecx', 'edx', 'ebp', 'esp', 'esi', 'edi'] as const
+type RegisterKey = (typeof REGISTER_KEYS)[number]
+type RegistersState = Record<RegisterKey, string>
+
+const DEFAULT_REGISTERS: RegistersState = {
+  eip: '0x00001000',
+  eax: '0x00000000',
+  ebx: '0x00000000',
+  ecx: '0x00000000',
+  edx: '0x00000000',
+  ebp: '0x00f00000',
+  esp: '0x00f00000',
+  esi: '0x00000000',
+  edi: '0x00000000',
+}
+
 const LOAD_ADDR = 0x00001000
 
 function PencilButton({
@@ -508,6 +524,12 @@ export function assemble(src: string): { bytes: Uint8Array; errors: string[] } {
 // ─── LabPage component ────────────────────────────────────────────────────────
 
 export default function LabPage() {
+  // Zoom feature
+  const EDITOR_BASE_FONT_SIZE = 13
+  const MIN_EDITOR_ZOOM = 10
+  const MAX_EDITOR_ZOOM = 300
+  const EDITOR_ZOOM_STEP = 10
+
   const location = useLocation()
   const navigate = useNavigate()
   const labNum = parseInt(location.pathname.replace('/lab', '')) || 1
@@ -525,6 +547,7 @@ export default function LabPage() {
   const [editTitle, setEditTitle] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const [editStarterCode, setEditStarterCode] = useState('')
+  const [editorZoom, setEditorZoom] = useState(100)
 
   // Breakpoints and debugging
   const [breakpoints, setBreakpoints] = useState<Set<number>>(new Set())
@@ -537,21 +560,107 @@ export default function LabPage() {
   const gutterScrollRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const [registers, setRegisters] = useState({
-    eip: '0x00001000',
-    eax: '0x00000000',
-    ebx: '0x00000000',
-    ecx: '0x00000000',
-    edx: '0x00000000',
-    ebp: '0x00f00000',
-    esp: '0x00f00000',
-    esi: '0x00000000',
-    edi: '0x00000000',
-  })
+  const [registers, setRegisters] = useState<RegistersState>({ ...DEFAULT_REGISTERS })
+  const lastValidRegistersRef = useRef<RegistersState>({ ...DEFAULT_REGISTERS })
 
   const [flags, setFlags] = useState({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
   const [memoryView, setMemoryView] = useState<number[]>(Array(48).fill(0))
   const lines = code.split('\n')
+
+  const editorFontSize = Math.round((EDITOR_BASE_FONT_SIZE * editorZoom) / 100)
+  const zoomInEditor = () => {
+    setEditorZoom((z) => Math.min(MAX_EDITOR_ZOOM, z + EDITOR_ZOOM_STEP))
+  }
+  const zoomOutEditor = () => {
+    setEditorZoom((z) => Math.max(MIN_EDITOR_ZOOM, z - EDITOR_ZOOM_STEP))
+  }
+
+  const setRegistersCommitted = (next: RegistersState) => {
+    const committed = { ...next }
+    lastValidRegistersRef.current = committed
+    setRegisters(committed)
+  }
+
+  const parseRegisterValue = (raw: string): number | null => {
+    const t = raw.trim()
+    if (!t) return null
+    if (/^0x[0-9a-f]+$/i.test(t)) {
+      return parseInt(t, 16) >>> 0
+    }
+    if (/^[+-]?\d+$/.test(t)) {
+      return parseInt(t, 10) >>> 0
+    }
+    if (/^[0-9a-f]+$/i.test(t) && /[a-f]/i.test(t)) {
+      return parseInt(t, 16) >>> 0
+    }
+    return null
+  }
+
+  const formatRegisterValue = (n: number | bigint) => {
+    const val = typeof n === 'bigint' ? Number(n) : n
+    return `0x${(val >>> 0).toString(16).padStart(8, '0')}`
+  }
+
+  const setEmuRegister = (emu: EmulatorApi, reg: RegisterKey, value: number): void => {
+    switch (reg) {
+      case 'eip':
+        emu.set_eip(value)
+        break
+      case 'eax':
+        emu.set_eax(value)
+        break
+      case 'ebx':
+        emu.set_ebx(value)
+        break
+      case 'ecx':
+        emu.set_ecx(value)
+        break
+      case 'edx':
+        emu.set_edx(value)
+        break
+      case 'ebp':
+        emu.set_ebp(value)
+        break
+      case 'esp':
+        emu.set_esp(value)
+        break
+      case 'esi':
+        emu.set_esi(value)
+        break
+      case 'edi':
+        emu.set_edi(value)
+        break
+    }
+  }
+
+  const applyRegistersToEmu = (emu: EmulatorApi, regs: RegistersState) => {
+    for (const reg of REGISTER_KEYS) {
+      const parsed = parseRegisterValue(regs[reg])
+      if (parsed == null) continue
+      setEmuRegister(emu, reg, parsed)
+    }
+  }
+
+  const commitRegister = (reg: RegisterKey) => {
+    const parsed = parseRegisterValue(registers[reg])
+    if (parsed == null) {
+      setConsoleOutput((s) => s + `Invalid ${reg.toUpperCase()} value: ${registers[reg]}\n`)
+      setRegisters({ ...lastValidRegistersRef.current })
+      return
+    }
+    const formatted = formatRegisterValue(parsed)
+    const next = { ...lastValidRegistersRef.current, [reg]: formatted }
+    setRegistersCommitted(next)
+
+    const emu = wasmEmuRef.current
+    if (emu) {
+      setEmuRegister(emu, reg, parsed)
+    }
+  }
+
+  const onRegisterInputChange = (reg: RegisterKey, value: string) => {
+    setRegisters((prev) => ({ ...prev, [reg]: value }))
+  }
 
   // Check auth and role on mount
   useEffect(() => {
@@ -580,11 +689,8 @@ export default function LabPage() {
     setEditingStarterCode(false)
     setConsoleOutput('')
     setSteps(0)
-    setRegisters({
-      eip: '0x00001000', eax: '0x00000000', ebx: '0x00000000',
-      ecx: '0x00000000', edx: '0x00000000', ebp: '0x00f00000',
-      esp: '0x00f00000', esi: '0x00000000', edi: '0x00000000',
-    })
+    setEditorZoom(100)
+    setRegistersCommitted({ ...DEFAULT_REGISTERS })
     setFlags({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
     setMemoryView(Array(48).fill(0))
     if (wasmEmuRef.current) {
@@ -627,26 +733,46 @@ export default function LabPage() {
   }, [])
 
   function refreshRegistersFromWasm(emu: EmulatorApi) {
-    const fmt = (n: number | bigint) => {
-      const v = typeof n === 'bigint' ? Number(n) : n
-      return `0x${(v >>> 0).toString(16).padStart(8, '0').toUpperCase()}`
-    }
-    setRegisters({
-      eip: fmt(emu.get_eip()), eax: fmt(emu.get_eax()), ebx: fmt(emu.get_ebx()),
-      ecx: fmt(emu.get_ecx()), edx: fmt(emu.get_edx()), ebp: fmt(emu.get_ebp()),
-      esp: fmt(emu.get_esp()), esi: fmt(emu.get_esi()), edi: fmt(emu.get_edi()),
-    })
-    setFlags({
-      zf: emu.get_zf() ? 1 : 0,
-      sf: emu.get_sf() ? 1 : 0,
-      of: emu.get_of() ? 1 : 0,
-      cf: emu.get_cf() ? 1 : 0,
-      pf: emu.get_pf() ? 1 : 0,
-      df: 0,
-    })
     try {
-      setMemoryView(Array.from({ length: 48 }, (_, i) => Number(emu.read_u8(LOAD_ADDR + i)) & 0xFF))
-    } catch (_) { /* memory read optional */ }
+      const eip = formatRegisterValue(emu.get_eip())
+      const eax = formatRegisterValue(emu.get_eax())
+      const ebx = formatRegisterValue(emu.get_ebx())
+      const ecx = formatRegisterValue(emu.get_ecx())
+      const edx = formatRegisterValue(emu.get_edx())
+      const ebp = formatRegisterValue(emu.get_ebp())
+      const esp = formatRegisterValue(emu.get_esp())
+      const esi = formatRegisterValue(emu.get_esi())
+      const edi = formatRegisterValue(emu.get_edi())
+
+      setRegistersCommitted({ eip, eax, ebx, ecx, edx, ebp, esp, esi, edi })
+
+      const zf = emu.get_zf() ? 1 : 0
+      const sf = emu.get_sf() ? 1 : 0
+      const of = emu.get_of() ? 1 : 0
+      const cf = emu.get_cf() ? 1 : 0
+      const pf = emu.get_pf() ? 1 : 0
+      const df = 0
+
+      // update flags panel
+      setFlags({ zf, sf, of, cf, df, pf })
+
+      // Try to read a small memory window starting at LOAD_ADDR if emulator exposes read_u8
+      try {
+        const emuUnknown = emu as unknown as { read_u8?: (addr: number) => number }
+        if (typeof emuUnknown.read_u8 === 'function') {
+          const bytes: number[] = []
+          for (let i = 0; i < memoryView.length; i++) {
+            const v = emuUnknown.read_u8(LOAD_ADDR + i)
+            bytes.push(Number(v) & 0xFF)
+          }
+          setMemoryView(bytes)
+        }
+      } catch (e) {
+        setConsoleOutput((s) => s + `${String(e)}\n`)
+      }
+    } catch (e) {
+      setConsoleOutput((s) => s + `WASM refresh error: ${String(e)}\n`)
+    }
   }
 
   function onRun() {
@@ -665,6 +791,7 @@ export default function LabPage() {
     }
     try {
       emu.load_program(bytes, LOAD_ADDR)
+        applyRegistersToEmu(emu, registers)
       setConsoleOutput((s) => s + `Assembled ${bytes.length} bytes. Running...\n`)
 
       const MAX_STEPS = 256
@@ -711,6 +838,7 @@ export default function LabPage() {
       }
       try {
         emu.load_program(bytes, LOAD_ADDR)
+          applyRegistersToEmu(emu, registers)
         setConsoleOutput((s) => s + `Assembled ${bytes.length} bytes. Stepping...\n`)
       } catch (e) {
         setConsoleOutput((s) => s + `Load error: ${String(e)}\n`)
@@ -1029,6 +1157,27 @@ export default function LabPage() {
         <section className="editor-pane">
           <div className="editor-header editor-header-row">
             <span>Assembly Editor</span>
+            <div className="editor-zoom-controls" role="group" aria-label="Assembly editor zoom controls">
+              <button
+                type="button"
+                className="editor-zoom-button"
+                onClick={zoomOutEditor}
+                disabled={editorZoom <= MIN_EDITOR_ZOOM}
+                aria-label="Zoom out assembly editor"
+              >
+                -
+              </button>
+              <span className="editor-zoom-value" aria-live="polite">{editorZoom}%</span>
+              <button
+                type="button"
+                className="editor-zoom-button"
+                onClick={zoomInEditor}
+                disabled={editorZoom >= MAX_EDITOR_ZOOM}
+                aria-label="Zoom in assembly editor"
+              >
+                +
+              </button>
+            </div>
             {userRole === 'admin' && !editingStarterCode && (
               <PencilButton onClick={() => {
                 setEditStarterCode(labConfig.starterCode)
@@ -1082,7 +1231,8 @@ export default function LabPage() {
               }}
               spellCheck={false}
               aria-label={editingStarterCode ? 'Lab starter code editor' : 'Assembly editor'}
-            />
+              style={{ fontSize: `${editorFontSize}px`}}
+              />
           </div>
           {editingStarterCode && userRole === 'admin' && (
             <div className="inline-editor-actions">
@@ -1098,12 +1248,114 @@ export default function LabPage() {
 
           <div className="panel-heading">Registers</div>
           <div className="registers">
-            {(['eip','eax','ebx','ecx','edx','ebp','esp','esi','edi'] as const).map((r) => (
-              <div key={r} className="reg-row">
-                <span className="reg-name">{r.toUpperCase()}</span>
-                <span className="reg-val">{registers[r]}</span>
-              </div>
-            ))}
+            <div className="reg-row">
+              <span className="reg-name">EIP</span>
+              <input
+                className="reg-val reg-input"
+                value={registers.eip}
+                onChange={(e) => onRegisterInputChange('eip', e.target.value)}
+                onBlur={() => commitRegister('eip')}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                aria-label="EIP register"
+              />
+            </div>
+            <div className="reg-row">
+              <span className="reg-name">EAX</span>
+              <input
+                className="reg-val reg-input"
+                value={registers.eax}
+                onChange={(e) => onRegisterInputChange('eax', e.target.value)}
+                onBlur={() => commitRegister('eax')}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                aria-label="EAX register"
+              />
+            </div>
+            <div className="reg-row">
+              <span className="reg-name">EBX</span>
+              <input
+                className="reg-val reg-input"
+                value={registers.ebx}
+                onChange={(e) => onRegisterInputChange('ebx', e.target.value)}
+                onBlur={() => commitRegister('ebx')}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                aria-label="EBX register"
+              />
+            </div>
+            <div className="reg-row">
+              <span className="reg-name">ECX</span>
+              <input
+                className="reg-val reg-input"
+                value={registers.ecx}
+                onChange={(e) => onRegisterInputChange('ecx', e.target.value)}
+                onBlur={() => commitRegister('ecx')}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                aria-label="ECX register"
+              />
+            </div>
+            <div className="reg-row">
+              <span className="reg-name">EDX</span>
+              <input
+                className="reg-val reg-input"
+                value={registers.edx}
+                onChange={(e) => onRegisterInputChange('edx', e.target.value)}
+                onBlur={() => commitRegister('edx')}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                aria-label="EDX register"
+              />
+            </div>
+            <div className="reg-row">
+              <span className="reg-name">EBP</span>
+              <input
+                className="reg-val reg-input"
+                value={registers.ebp}
+                onChange={(e) => onRegisterInputChange('ebp', e.target.value)}
+                onBlur={() => commitRegister('ebp')}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                aria-label="EBP register"
+              />
+            </div>
+            <div className="reg-row">
+              <span className="reg-name">ESP</span>
+              <input
+                className="reg-val reg-input"
+                value={registers.esp}
+                onChange={(e) => onRegisterInputChange('esp', e.target.value)}
+                onBlur={() => commitRegister('esp')}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                aria-label="ESP register"
+              />
+            </div>
+            <div className="reg-row">
+              <span className="reg-name">ESI</span>
+              <input
+                className="reg-val reg-input"
+                value={registers.esi}
+                onChange={(e) => onRegisterInputChange('esi', e.target.value)}
+                onBlur={() => commitRegister('esi')}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                aria-label="ESI register"
+              />
+            </div>
+            <div className="reg-row">
+              <span className="reg-name">EDI</span>
+              <input
+                className="reg-val reg-input"
+                value={registers.edi}
+                onChange={(e) => onRegisterInputChange('edi', e.target.value)}
+                onBlur={() => commitRegister('edi')}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                aria-label="EDI register"
+              />
+            </div>
           </div>
 
           <div className="panel-heading" style={{ marginTop: 12 }}>Flags</div>
