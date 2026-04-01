@@ -1131,7 +1131,7 @@ export default function LabPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.asm"
+            accept=".txt"
             onChange={onFileSelected}
             style={{ display: 'none' }}
           />

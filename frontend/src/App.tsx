@@ -57,7 +57,7 @@ export default function App() {
   const editorScrollRef = useRef<HTMLTextAreaElement | null>(null)
   const gutterScrollRef = useRef<HTMLDivElement | null>(null)
   const lines = code.split('\n')
-  // const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const navigate = useNavigate()
   const [editorZoom, setEditorZoom] = useState(100)
 
@@ -816,9 +816,9 @@ export default function App() {
     setMemoryView(Array(48).fill(0))
   }
 
-// function onOpenFileClick() {
-//   fileInputRef.current?.click();
-// }
+function onOpenFileClick() {
+  fileInputRef.current?.click()
+}
 
 function onLogout() {
   localStorage.removeItem('userRole')
@@ -827,21 +827,21 @@ function onLogout() {
   navigate('/login')
 }
 
-// async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-//   const file = e.target.files?.[0];
-//   if (!file) return;
+async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0]
+  if (!file) return
 
-//   try {
-//     const text = await file.text();
-//     setCode(text); // loads into your Assembly Editor textarea
-//     setConsoleOutput((s) => s + `Opened file: ${file.name}\n`);
-//   } catch (err) {
-//     console.error(err);
-//     setConsoleOutput((s) => s + `Open file error: ${String(err)}\n`);
-//   } finally {
-//     e.target.value = ""; // allows selecting same file again
-//   }
-// }
+  try {
+    const text = await file.text()
+    setCode(text)
+    setConsoleOutput((s) => s + `Opened file: ${file.name}\n`)
+  } catch (err) {
+    console.error(err)
+    setConsoleOutput((s) => s + `Open file error: ${String(err)}\n`)
+  } finally {
+    e.target.value = ''
+  }
+}
 
   function refreshRegistersFromWasm(emu: EmulatorApi) {
     try {
@@ -911,7 +911,14 @@ function onLogout() {
           </span>
         </div>
         <div className="toolbar">
-          <button>Open</button>
+          <button onClick={onOpenFileClick}>Open</button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt"
+            onChange={onFileSelected}
+            style={{ display: "none" }}
+          />
           <button>Save</button>
           <button>Save as</button>
           <button onClick={onRun} className="primary">Run</button>
