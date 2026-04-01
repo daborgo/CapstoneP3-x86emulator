@@ -16,8 +16,6 @@ pub mod mov;
 pub mod jmp;
 pub mod ret;
 pub mod mul;
-pub mod and;
-pub mod or;
 pub mod shift;
 pub mod cmp;
 pub mod instruction_error_tests;
@@ -42,10 +40,7 @@ pub enum InstructionError {
     JmpError(String),
     RetError(ret::ExecutionError),
     MulError(mul::ExecutionError),
-    AndError(and::ExecutionError),
-    OrError(or::ExecutionError),
     ShiftError(shift::ExecutionError),
-    CmpError(cmp::ExecutionError),
 }
 
 impl fmt::Display for InstructionError {
@@ -84,6 +79,12 @@ impl fmt::Display for InstructionError {
             InstructionError::RetError(err) => {
                 write!(f, "RET error: {}", err)
             },
+            InstructionError::MulError(err) => {
+                write!(f, "MUL error: {}", err)
+            },
+            InstructionError::ShiftError(err) => {
+                write!(f, "SHIFT error: {}", err)
+            },
         }
     }
 }
@@ -100,56 +101,10 @@ impl From<and::ExecutionError>   for InstructionError { fn from(e: and::Executio
 impl From<or::ExecutionError>    for InstructionError { fn from(e: or::ExecutionError)    -> Self { InstructionError::OrError(e) } }
 impl From<shift::ExecutionError> for InstructionError { fn from(e: shift::ExecutionError) -> Self { InstructionError::ShiftError(e) } }
 impl From<cmp::ExecutionError>   for InstructionError { fn from(e: cmp::ExecutionError)   -> Self { InstructionError::CmpError(e) } }
-impl From<mov::ExecutionError>   for InstructionError {
-    fn from(e: mov::ExecutionError) -> Self { InstructionError::MovError(format!("{:?}", e)) }
-}
+impl From<mov::ExecutionError>   for InstructionError { fn from(e: mov::ExecutionError) -> Self { InstructionError::MovError(format!("{:?}", e)) } }
+impl From<String> for InstructionError { fn from(s: String) -> Self { InstructionError::JmpError(s) } }
 
-impl From<push::ExecutionError> for InstructionError {
-    fn from(err: push::ExecutionError) -> Self {
-        InstructionError::PushError(err)
-    }
-}
 
-impl From<mov::ExecutionError> for InstructionError {
-    fn from(err: mov::ExecutionError) -> Self {
-        // Use Debug so mov::ExecutionError doesn't need Display/Clone/Eq
-        InstructionError::MovError(format!("{:?}", err))
-    }
-}
-
-impl From<sub::ExecutionError> for InstructionError {
-    fn from(err: sub::ExecutionError) -> Self {
-        InstructionError::SubError(err)
-    }
-}
-
-impl From<add::ExecutionError> for InstructionError {
-    fn from(err: add::ExecutionError) -> Self {
-        InstructionError::AddError(err)
-    }
-}
-
-impl From<and::ExecutionError> for InstructionError {
-    fn from(err: and::ExecutionError) -> Self {
-        InstructionError::AndError(err)
-    }
-}
-
-impl From<or::ExecutionError> for InstructionError {
-    fn from(err: or::ExecutionError) -> Self {
-        InstructionError::OrError(err)
-    }
-}
-
-impl From<cmp::ExecutionError> for InstructionError {
-    fn from(err: cmp::ExecutionError) -> Self {
-        InstructionError::CmpError(err)
-    }
-}
-
-impl From<String> for InstructionError {
-    fn from(s: String) -> Self { InstructionError::JmpError(s) }
-}
 
 // ─── Memory sentinel resolver for MOV ────────────────────────────────────────
 // Translates an Instruction that may contain Memory sentinels into one with

@@ -42,8 +42,6 @@ pub enum Opcode {
     MUL,
     IDIV,
     CDQ,
-    AND,
-    OR,
     SHL,
     SHR,
     SAR,
@@ -869,15 +867,7 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
                 length: 2,
             })
         },
-        Opcode::RET => {
-            // RET is a single byte instruction (near return)
-            Ok(Instruction {
-                opcode,
-                dest: Some(Operand::Register(dest_reg)),
-                src: Some(Operand::Register(src_reg)),
-                length: 2,
-            })
-        }
+        
         Opcode::AND => {
             if bytes.len() < 2 { return Err(DecodeError::InsufficientBytes); }
             let modrm = bytes[1];
@@ -999,6 +989,10 @@ mod tests {
         assert_eq!(instr.opcode, Opcode::AND);
         assert_eq!(instr.dest, Some(Operand::Register(RegisterName::EAX)));
         assert_eq!(instr.src, Some(Operand::Immediate(0x0000_FFFF)));
+        assert_eq!(instr.length, 6);
+    }
+
+    #[test]
     fn test_decode_push_eax() {
         let bytes = [0x50];
         let instr = decode(&bytes).unwrap();
