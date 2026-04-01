@@ -125,6 +125,46 @@ impl Emulator {
     pub fn set_eax(&mut self, value: u32) {
         self.cpu.registers.eax = value;
     }
+    
+    /// Set EBX register value
+    pub fn set_ebx(&mut self, value: u32) {
+        self.cpu.registers.ebx = value;
+    }
+    
+    /// Set ECX register value
+    pub fn set_ecx(&mut self, value: u32) {
+        self.cpu.registers.ecx = value;
+    }
+    
+    /// Set EDX register value
+    pub fn set_edx(&mut self, value: u32) {
+        self.cpu.registers.edx = value;
+    }
+    
+    /// Set EBP register value
+    pub fn set_ebp(&mut self, value: u32) {
+        self.cpu.registers.ebp = value;
+    }
+    
+    /// Set ESP register value
+    pub fn set_esp(&mut self, value: u32) {
+        self.cpu.registers.esp = value;
+    }
+    
+    /// Set ESI register value
+    pub fn set_esi(&mut self, value: u32) {
+        self.cpu.registers.esi = value;
+    }
+    
+    /// Set EDI register value
+    pub fn set_edi(&mut self, value: u32) {
+        self.cpu.registers.edi = value;
+    }
+    
+    /// Set EIP (instruction pointer) value
+    pub fn set_eip(&mut self, value: u32) {
+        self.cpu.registers.eip = value;
+    }
 
     /// Get EIP (instruction pointer) value
     pub fn get_eip(&self) -> u32 {

@@ -202,4 +202,3 @@ mod tests {
         assert!(cpu.flags.cf); // Unsigned borrow: 0x7FFFFFFF < 0xFFFFFFFF
     }
 }
-

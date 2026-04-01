@@ -10,12 +10,12 @@ pub mod push;
 pub mod call;
 pub mod sub;
 pub mod add;
+pub mod and;
+pub mod or;
 pub mod mov;
 pub mod jmp;
 pub mod ret;
 pub mod mul;
-pub mod and;
-pub mod or;
 pub mod shift;
 pub mod cmp;
 pub mod instruction_error_tests;
@@ -33,31 +33,58 @@ pub enum InstructionError {
     MovError(String),
     SubError(sub::ExecutionError),
     AddError(add::ExecutionError),
+    AndError(and::ExecutionError),
+    OrError(or::ExecutionError),
+    CmpError(cmp::ExecutionError),
+    /// JMP instruction specific errors
     JmpError(String),
     RetError(ret::ExecutionError),
     MulError(mul::ExecutionError),
-    AndError(and::ExecutionError),
-    OrError(or::ExecutionError),
     ShiftError(shift::ExecutionError),
-    CmpError(cmp::ExecutionError),
 }
 
 impl fmt::Display for InstructionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            InstructionError::UnsupportedInstruction(op) => write!(f, "Unsupported instruction: {}", op),
-            InstructionError::PopError(e)   => write!(f, "POP error: {}", e),
-            InstructionError::PushError(e)  => write!(f, "PUSH error: {}", e),
-            InstructionError::MovError(m)   => write!(f, "MOV error: {}", m),
-            InstructionError::SubError(e)   => write!(f, "SUB error: {:?}", e),
-            InstructionError::AddError(e)   => write!(f, "ADD error: {:?}", e),
-            InstructionError::JmpError(m)   => write!(f, "JMP error: {}", m),
-            InstructionError::RetError(e)   => write!(f, "RET error: {}", e),
-            InstructionError::MulError(e)   => write!(f, "MUL/IDIV/CDQ error: {}", e),
-            InstructionError::AndError(e)   => write!(f, "AND error: {}", e),
-            InstructionError::OrError(e)    => write!(f, "OR error: {}", e),
-            InstructionError::ShiftError(e) => write!(f, "Shift error: {}", e),
-            InstructionError::CmpError(e)   => write!(f, "CMP error: {}", e),
+            InstructionError::UnsupportedInstruction(opcode) => {
+                write!(f, "Unsupported instruction: {}", opcode)
+            },
+            InstructionError::PopError(err) => {
+                write!(f, "POP error: {}", err)
+            },
+            InstructionError::PushError(err) => {
+                write!(f, "PUSH error: {}", err)
+            },
+            InstructionError::MovError(msg) => {
+                write!(f, "MOV error: {}", msg)
+            },
+            InstructionError::SubError(err) => {
+                write!(f, "SUB error: {:?}", err)
+            },
+            InstructionError::AddError(err) => {
+                write!(f, "ADD error: {:?}", err)
+            },
+            InstructionError::AndError(err) => {
+                write!(f, "AND error: {}", err)
+            },
+            InstructionError::OrError(err) => {
+                write!(f, "OR error: {}", err)
+            },
+            InstructionError::CmpError(err) => {
+                write!(f, "CMP error: {}", err)
+            },
+            InstructionError::JmpError(msg) => {
+                write!(f, "JMP error: {}", msg)
+            },
+            InstructionError::RetError(err) => {
+                write!(f, "RET error: {}", err)
+            },
+            InstructionError::MulError(err) => {
+                write!(f, "MUL error: {}", err)
+            },
+            InstructionError::ShiftError(err) => {
+                write!(f, "SHIFT error: {}", err)
+            },
         }
     }
 }
@@ -74,12 +101,10 @@ impl From<and::ExecutionError>   for InstructionError { fn from(e: and::Executio
 impl From<or::ExecutionError>    for InstructionError { fn from(e: or::ExecutionError)    -> Self { InstructionError::OrError(e) } }
 impl From<shift::ExecutionError> for InstructionError { fn from(e: shift::ExecutionError) -> Self { InstructionError::ShiftError(e) } }
 impl From<cmp::ExecutionError>   for InstructionError { fn from(e: cmp::ExecutionError)   -> Self { InstructionError::CmpError(e) } }
-impl From<mov::ExecutionError>   for InstructionError {
-    fn from(e: mov::ExecutionError) -> Self { InstructionError::MovError(format!("{:?}", e)) }
-}
-impl From<String> for InstructionError {
-    fn from(s: String) -> Self { InstructionError::JmpError(s) }
-}
+impl From<mov::ExecutionError>   for InstructionError { fn from(e: mov::ExecutionError) -> Self { InstructionError::MovError(format!("{:?}", e)) } }
+impl From<String> for InstructionError { fn from(s: String) -> Self { InstructionError::JmpError(s) } }
+
+
 
 // ─── Memory sentinel resolver for MOV ────────────────────────────────────────
 // Translates an Instruction that may contain Memory sentinels into one with

@@ -56,7 +56,7 @@ impl Registers {
     ///
     /// Default values are chosen to represent a "clean" CPU state:
     /// - All GPRs start at 0 (undefined in real CPU, but safe for emulation)
-    /// - ESP/EBP start at stack base (0xFFFF0000)
+    /// - ESP/EBP start at stack base (0x00FF0000 in default 16MB memory)
     /// - EIP starts at code section (0x00001000)
     pub fn new() -> Self {
         Registers {

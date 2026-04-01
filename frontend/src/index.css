@@ -211,13 +211,43 @@ html, body, #root { height: 100vh; margin: 0; font-family: Inter, system-ui, Seg
   overflow: hidden;
 }
 .editor-header {
-  padding: 8px 12px;
-  border-bottom: 1px solid #eee;
-  font-weight: 700;
-  font-size: 0.82rem;
-  color: #333;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+padding: 10px 12px; border-bottom: 1px solid #eee; font-weight: 600;
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 10px;
+}
+/* zoom feature */
+.editor-zoom-controls {
+display: flex;
+align-items: center;
+gap: 6px;
+}
+.editor-zoom-button {
+width: 28px;
+height: 28px;
+padding: 0;
+border-radius: 6px;
+border: 1px solid #d4dceb;
+background: #f3f6fb;
+color: #123;
+font-size: 1rem;
+line-height: 1;
+}
+.editor-zoom-button:disabled {
+cursor: not-allowed;
+opacity: 0.45;
+}
+.editor-zoom-value {
+min-width: 48px;
+text-align: center;
+font-weight: 700;
+font-size: 0.85rem;
+color: #234;
+}
+.editor {
+  flex: 1; width: 100%; padding: 12px; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 13px; line-height: 1.5; border: 0; resize: none;
+  background: #f3f6fb; color: #0b0b0b; min-height: 120px; max-height: 100%; overflow: auto;
 }
 .editor-header-row {
   display: flex;
@@ -238,6 +268,13 @@ html, body, #root { height: 100vh; margin: 0; font-family: Inter, system-ui, Seg
   min-height: 80px;
   overflow: auto;
 }
+.panel-heading { font-weight: 700; margin-bottom: 8px }
+.registers { display: flex; flex-direction: column; gap: 6px; align-self: flex-start; width: 100% }
+.reg-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: #f3f6fb; border-radius: 6px; font-family: monospace }
+.reg-name { color: #155; font-weight: 600 }
+.reg-val { background: #fff; padding: 4px 8px; border-radius: 6px; font-family: monospace }
+.reg-input { border: 1px solid #e0e5ef; color: inherit; min-width: 120px }
+.reg-input:focus { outline: 2px solid rgba(100,108,255,0.6); outline-offset: 1px }
 .editor:focus { outline: none }
 .editor:focus-visible { outline: 2px solid rgba(100,108,255,0.75); outline-offset: -2px }
 

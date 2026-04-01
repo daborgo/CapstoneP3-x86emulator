@@ -27,8 +27,15 @@ impl From<crate::memory::MemoryError> for ExecutionError {
     }
 }
 
-/// OR r/m32, r32 or OR r/m32, imm32
 pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) -> Result<(), ExecutionError> {
+    let load_operand = |op: Operand| -> Result<u32, ExecutionError> {
+        match op {
+            Operand::Register(r) => Ok(cpu.registers.get(r)),
+            Operand::Immediate(v) => Ok(v),
+            Operand::Memory(addr) => Ok(memory.read_u32(addr)?),
+        }
+    };
+
     let dst_op = instruction.dest.ok_or(ExecutionError::InvalidOperand)?;
     let src_op = instruction.src.ok_or(ExecutionError::InvalidOperand)?;
 
@@ -37,24 +44,86 @@ pub fn execute(cpu: &mut CPU, memory: &mut Memory, instruction: &Instruction) ->
         _ => return Err(ExecutionError::InvalidOperand),
     };
 
-    let src_val: u32 = match src_op {
-        Operand::Register(r) => cpu.registers.get(r),
-        Operand::Immediate(v) => v,
-        Operand::Memory(addr) => memory.read_u32(addr)?,
-    };
+    let a = cpu.registers.get(dst_reg);
+    let b = load_operand(src_op)?;
+    let result = a | b;
 
-    let result = cpu.registers.get(dst_reg) | src_val;
     cpu.registers.set(dst_reg, result);
-
-    // OR: CF=0, OF=0, ZF, SF, PF updated
-    cpu.flags.cf = false;
-    cpu.flags.of = false;
-    cpu.flags.af = false;
-    cpu.flags.zf = result == 0;
-    cpu.flags.sf = (result & 0x8000_0000) != 0;
-    let lowest_byte = (result & 0xFF) as u8;
-    cpu.flags.pf = lowest_byte.count_ones() % 2 == 0;
-
+    cpu.flags.calculate_or_flags(result);
     cpu.registers.advance_ip(instruction.length as u32);
+
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cpu::RegisterName;
+    use crate::decoder::{Instruction, Opcode, Operand};
+    use crate::memory::Memory as Ram;
+
+    #[test]
+    fn test_or_registers() {
+        let mut cpu = crate::cpu::CPU::new();
+        let mut memory = Ram::new(0x1000000);
+
+        cpu.registers.eax = 0xF0F0_0000;
+        cpu.registers.ebx = 0x0000_0FF0;
+        cpu.registers.eip = 0x1000;
+
+        let instr = Instruction {
+            opcode: Opcode::OR,
+            dest: Some(Operand::Register(RegisterName::EAX)),
+            src: Some(Operand::Register(RegisterName::EBX)),
+            length: 2,
+        };
+
+        execute(&mut cpu, &mut memory, &instr).unwrap();
+
+        assert_eq!(cpu.registers.eax, 0xF0F0_0FF0);
+        assert_eq!(cpu.registers.eip, 0x1002);
+        assert!(!cpu.flags.cf);
+        assert!(!cpu.flags.of);
+        assert!(!cpu.flags.zf);
+    }
+
+    #[test]
+    fn test_or_immediate_sets_zero_flag() {
+        let mut cpu = crate::cpu::CPU::new();
+        let mut memory = Ram::new(0x1000000);
+
+        cpu.registers.eax = 0x0000_0000;
+        cpu.registers.eip = 0x1000;
+
+        let instr = Instruction {
+            opcode: Opcode::OR,
+            dest: Some(Operand::Register(RegisterName::EAX)),
+            src: Some(Operand::Immediate(0x0)),
+            length: 6,
+        };
+
+        execute(&mut cpu, &mut memory, &instr).unwrap();
+
+        assert_eq!(cpu.registers.eax, 0x0000_0000);
+        assert_eq!(cpu.registers.eip, 0x1006);
+        assert!(cpu.flags.zf);
+        assert!(!cpu.flags.cf);
+        assert!(!cpu.flags.of);
+    }
+
+    #[test]
+    fn test_or_invalid_destination() {
+        let mut cpu = crate::cpu::CPU::new();
+        let mut memory = Ram::new(0x1000000);
+
+        let instr = Instruction {
+            opcode: Opcode::OR,
+            dest: Some(Operand::Immediate(1)),
+            src: Some(Operand::Register(RegisterName::EBX)),
+            length: 2,
+        };
+
+        let res = execute(&mut cpu, &mut memory, &instr);
+        assert_eq!(res.unwrap_err(), ExecutionError::InvalidOperand);
+    }
 }
