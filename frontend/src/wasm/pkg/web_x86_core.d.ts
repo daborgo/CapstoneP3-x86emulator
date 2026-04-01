@@ -50,6 +50,38 @@ export class Emulator {
    */
   set_eax(value: number): void;
   /**
+   * Set EBX register value
+   */
+  set_ebx(value: number): void;
+  /**
+   * Set ECX register value
+   */
+  set_ecx(value: number): void;
+  /**
+   * Set EDX register value
+   */
+  set_edx(value: number): void;
+  /**
+   * Set EBP register value
+   */
+  set_ebp(value: number): void;
+  /**
+   * Set ESP register value
+   */
+  set_esp(value: number): void;
+  /**
+   * Set ESI register value
+   */
+  set_esi(value: number): void;
+  /**
+   * Set EDI register value
+   */
+  set_edi(value: number): void;
+  /**
+   * Set EIP (instruction pointer) value
+   */
+  set_eip(value: number): void;
+  /**
    * Get EIP (instruction pointer) value
    */
   get_eip(): number;
@@ -89,6 +121,14 @@ export interface InitOutput {
   readonly emulator_get_esi: (a: number) => number;
   readonly emulator_get_edi: (a: number) => number;
   readonly emulator_set_eax: (a: number, b: number) => void;
+  readonly emulator_set_ebx: (a: number, b: number) => void;
+  readonly emulator_set_ecx: (a: number, b: number) => void;
+  readonly emulator_set_edx: (a: number, b: number) => void;
+  readonly emulator_set_ebp: (a: number, b: number) => void;
+  readonly emulator_set_esp: (a: number, b: number) => void;
+  readonly emulator_set_esi: (a: number, b: number) => void;
+  readonly emulator_set_edi: (a: number, b: number) => void;
+  readonly emulator_set_eip: (a: number, b: number) => void;
   readonly emulator_get_eip: (a: number) => number;
   readonly emulator_get_esp: (a: number) => number;
   readonly emulator_get_cf: (a: number) => number;

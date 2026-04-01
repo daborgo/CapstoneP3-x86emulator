@@ -215,6 +215,86 @@ export class Emulator {
         wasm.emulator_set_eax(this.__wbg_ptr, value);
     }
     /**
+     * Set EBX register value
+     * @param {number} value
+     */
+    set_ebx(value) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        _assertNum(value);
+        wasm.emulator_set_ebx(this.__wbg_ptr, value);
+    }
+    /**
+     * Set ECX register value
+     * @param {number} value
+     */
+    set_ecx(value) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        _assertNum(value);
+        wasm.emulator_set_ecx(this.__wbg_ptr, value);
+    }
+    /**
+     * Set EDX register value
+     * @param {number} value
+     */
+    set_edx(value) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        _assertNum(value);
+        wasm.emulator_set_edx(this.__wbg_ptr, value);
+    }
+    /**
+     * Set EBP register value
+     * @param {number} value
+     */
+    set_ebp(value) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        _assertNum(value);
+        wasm.emulator_set_ebp(this.__wbg_ptr, value);
+    }
+    /**
+     * Set ESP register value
+     * @param {number} value
+     */
+    set_esp(value) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        _assertNum(value);
+        wasm.emulator_set_esp(this.__wbg_ptr, value);
+    }
+    /**
+     * Set ESI register value
+     * @param {number} value
+     */
+    set_esi(value) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        _assertNum(value);
+        wasm.emulator_set_esi(this.__wbg_ptr, value);
+    }
+    /**
+     * Set EDI register value
+     * @param {number} value
+     */
+    set_edi(value) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        _assertNum(value);
+        wasm.emulator_set_edi(this.__wbg_ptr, value);
+    }
+    /**
+     * Set EIP (instruction pointer) value
+     * @param {number} value
+     */
+    set_eip(value) {
+        if (this.__wbg_ptr == 0) throw new Error('Attempt to use a moved value');
+        _assertNum(this.__wbg_ptr);
+        _assertNum(value);
+        wasm.emulator_set_eip(this.__wbg_ptr, value);
+    }
+    /**
      * Get EIP (instruction pointer) value
      * @returns {number}
      */
