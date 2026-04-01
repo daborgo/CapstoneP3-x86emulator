@@ -11,14 +11,14 @@ export class Emulator {
   free(): void;
   [Symbol.dispose](): void;
   /**
+   * Create a new emulator instance
+   */
+  constructor();
+  /**
    * Load a program's raw bytes into memory at a given address and set EIP there
    * Returns Err(String) on memory write failure.
    */
   load_program(program: Uint8Array, load_address: number): void;
-  /**
-   * Create a new emulator instance
-   */
-  constructor();
   /**
    * Execute one instruction using fetch-decode-execute cycle
    *
@@ -30,95 +30,135 @@ export class Emulator {
    */
   step(): bigint;
   /**
-   * Reset the emulator to initial state
+   * Get the number of steps executed
    */
-  reset(): void;
-  get_af(): boolean;
-  /**
-   * Flag getters
-   */
-  get_cf(): boolean;
-  get_of(): boolean;
-  get_pf(): boolean;
-  get_sf(): boolean;
-  get_zf(): boolean;
+  get_steps(): bigint;
   /**
    * Get EAX register value (for testing)
    */
   get_eax(): number;
-  get_ebp(): number;
   /**
    * Additional register getters useful for UI
    */
   get_ebx(): number;
   get_ecx(): number;
-  get_edi(): number;
   get_edx(): number;
-  /**
-   * Get EIP (instruction pointer) value
-   */
-  get_eip(): number;
+  get_ebp(): number;
   get_esi(): number;
-  /**
-   * Get ESP (stack pointer) value
-   */
-  get_esp(): number;
-  /**
-   * Read a single byte from memory (used by the UI memory viewer)
-   */
-  read_u8(addr: number): number;
+  get_edi(): number;
   /**
    * Set EAX register value (for testing)
    */
   set_eax(value: number): void;
   /**
-   * Read a 32-bit value from memory (for result checking / grading)
+   * Set EBX register value
    */
-  read_u32(addr: number): number;
+  set_ebx(value: number): void;
   /**
-   * Get the number of steps executed
+   * Set ECX register value
    */
-  get_steps(): bigint;
+  set_ecx(value: number): void;
+  /**
+   * Set EDX register value
+   */
+  set_edx(value: number): void;
+  /**
+   * Set EBP register value
+   */
+  set_ebp(value: number): void;
+  /**
+   * Set ESP register value
+   */
+  set_esp(value: number): void;
+  /**
+   * Set ESI register value
+   */
+  set_esi(value: number): void;
+  /**
+   * Set EDI register value
+   */
+  set_edi(value: number): void;
+  /**
+   * Set EIP (instruction pointer) value
+   */
+  set_eip(value: number): void;
+  /**
+   * Get EIP (instruction pointer) value
+   */
+  get_eip(): number;
+  /**
+   * Get ESP (stack pointer) value
+   */
+  get_esp(): number;
+  /**
+   * Flag getters
+   */
+  get_cf(): boolean;
+  get_pf(): boolean;
+  get_af(): boolean;
+  get_zf(): boolean;
+  get_sf(): boolean;
+  get_of(): boolean;
+  /**
+   * Reset the emulator to initial state
+   */
+  reset(): void;
   /**
    * Write a 32-bit value to memory (for test setup / grading)
    */
   write_u32(addr: number, val: number): void;
+  /**
+   * Read a 32-bit value from memory (for result checking / grading)
+   */
+  read_u32(addr: number): number;
+  /**
+   * Read a single byte from memory (used by the UI memory viewer)
+   */
+  read_u8(addr: number): number;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly grade_lab: (a: number, b: number, c: number) => [number, number];
   readonly __wbg_emulator_free: (a: number, b: number) => void;
-  readonly emulator_get_af: (a: number) => number;
-  readonly emulator_get_cf: (a: number) => number;
+  readonly emulator_new: () => number;
+  readonly emulator_load_program: (a: number, b: number, c: number, d: number) => [number, number];
+  readonly emulator_step: (a: number) => bigint;
+  readonly emulator_get_steps: (a: number) => bigint;
   readonly emulator_get_eax: (a: number) => number;
-  readonly emulator_get_ebp: (a: number) => number;
   readonly emulator_get_ebx: (a: number) => number;
   readonly emulator_get_ecx: (a: number) => number;
-  readonly emulator_get_edi: (a: number) => number;
   readonly emulator_get_edx: (a: number) => number;
-  readonly emulator_get_eip: (a: number) => number;
+  readonly emulator_get_ebp: (a: number) => number;
   readonly emulator_get_esi: (a: number) => number;
+  readonly emulator_get_edi: (a: number) => number;
+  readonly emulator_set_eax: (a: number, b: number) => void;
+  readonly emulator_set_ebx: (a: number, b: number) => void;
+  readonly emulator_set_ecx: (a: number, b: number) => void;
+  readonly emulator_set_edx: (a: number, b: number) => void;
+  readonly emulator_set_ebp: (a: number, b: number) => void;
+  readonly emulator_set_esp: (a: number, b: number) => void;
+  readonly emulator_set_esi: (a: number, b: number) => void;
+  readonly emulator_set_edi: (a: number, b: number) => void;
+  readonly emulator_set_eip: (a: number, b: number) => void;
+  readonly emulator_get_eip: (a: number) => number;
   readonly emulator_get_esp: (a: number) => number;
-  readonly emulator_get_of: (a: number) => number;
+  readonly emulator_get_cf: (a: number) => number;
   readonly emulator_get_pf: (a: number) => number;
-  readonly emulator_get_sf: (a: number) => number;
-  readonly emulator_get_steps: (a: number) => bigint;
+  readonly emulator_get_af: (a: number) => number;
   readonly emulator_get_zf: (a: number) => number;
-  readonly emulator_load_program: (a: number, b: number, c: number, d: number) => [number, number];
-  readonly emulator_new: () => number;
+  readonly emulator_get_sf: (a: number) => number;
+  readonly emulator_get_of: (a: number) => number;
+  readonly emulator_reset: (a: number) => void;
+  readonly emulator_write_u32: (a: number, b: number, c: number) => [number, number];
   readonly emulator_read_u32: (a: number, b: number) => [number, number, number];
   readonly emulator_read_u8: (a: number, b: number) => [number, number, number];
-  readonly emulator_reset: (a: number) => void;
-  readonly emulator_set_eax: (a: number, b: number) => void;
-  readonly emulator_step: (a: number) => bigint;
-  readonly emulator_write_u32: (a: number, b: number, c: number) => [number, number];
+  readonly grade_lab: (a: number, b: number, c: number) => [number, number];
   readonly __wbindgen_externrefs: WebAssembly.Table;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
-  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __externref_table_dealloc: (a: number) => void;
+  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __wbindgen_start: () => void;
 }
 

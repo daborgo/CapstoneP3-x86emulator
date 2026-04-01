@@ -158,6 +158,31 @@ impl Flags {
         let lowest_byte = (result & 0xFF) as u8;
         self.pf = (lowest_byte.count_ones() % 2) == 0;
     }
+
+    /// Calculate flags for a logical OR operation
+    ///
+    /// OR operations only affect ZF, SF, and PF (not CF, OF, AF).
+    ///
+    /// # Arguments
+    /// * `result` - The result of the OR operation
+    pub fn calculate_or_flags(&mut self, result: u32) {
+        // CF and OF are always cleared for OR
+        self.cf = false;
+        self.of = false;
+
+        // AF is undefined for OR (we'll clear it)
+        self.af = false;
+
+        // ZF (Zero Flag): Result is zero
+        self.zf = result == 0;
+
+        // SF (Sign Flag): Result is negative (bit 31 is set)
+        self.sf = (result & 0x8000_0000) != 0;
+
+        // PF (Parity Flag): Even number of 1-bits in lowest byte
+        let lowest_byte = (result & 0xFF) as u8;
+        self.pf = (lowest_byte.count_ones() % 2) == 0;
+    }
     
     /// Clear all flags
     pub fn clear_all(&mut self) {
@@ -270,6 +295,19 @@ mod tests {
         assert!(!flags.zf);  // Not zero
         assert!(!flags.sf);  // Not negative
     }
+
+    #[test]
+    fn test_or_flags() {
+        let mut flags = Flags::new();
+
+        // OR operation: 0x12340000 | 0x00005678 = 0x12345678
+        flags.calculate_or_flags(0x12345678);
+
+        assert!(!flags.cf);  // Always cleared for OR
+        assert!(!flags.of);  // Always cleared for OR
+        assert!(!flags.zf);  // Not zero
+        assert!(!flags.sf);  // Not negative
+    }
     
     #[test]
     fn test_clear_all() {
@@ -288,4 +326,3 @@ mod tests {
         assert!(!flags.sf);
     }
 }
-
