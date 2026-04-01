@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './App.css'
 
 // Types for the generated WASM bindings
@@ -27,8 +28,8 @@ const DEFAULT_REGISTERS: RegistersState = {
   ebx: '0x00000000',
   ecx: '0x00000000',
   edx: '0x00000000',
-  ebp: '0x00FF0000',
-  esp: '0x00FF0000',
+  ebp: '0x00f00000',
+  esp: '0x00f00000',
   esi: '0x00000000',
   edi: '0x00000000',
 }
@@ -44,10 +45,22 @@ export default function App() {
   const [consoleOutput, setConsoleOutput] = useState('Hello, World!\n')
   const [steps, setSteps] = useState(0)
   const [wasmReady, setWasmReady] = useState(false)
-  const [editorZoom, setEditorZoom] = useState(100)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [username, setUsername] = useState<string | null>(null)
   const wasmEmuRef = useRef<EmulatorApi | null>(null)
   const wasmModRef = useRef<WasmModule | null>(null)
   const LOAD_ADDR = 0x00001000
+  //Breakpoints
+  const [breakpoints, setBreakpoints] = useState<Set<number>>(new Set())
+  const [currentLine, setCurrentLine] = useState<number | null>(null)
+  const [paused, setPaused] = useState(false)
+  const editorScrollRef = useRef<HTMLTextAreaElement | null>(null)
+  const gutterScrollRef = useRef<HTMLDivElement | null>(null)
+  const lines = code.split('\n')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const navigate = useNavigate()
+  const [editorZoom, setEditorZoom] = useState(100)
+
 
   const editorFontSize = Math.round((EDITOR_BASE_FONT_SIZE * editorZoom) / 100)
   const zoomInEditor = () => {
@@ -62,12 +75,12 @@ export default function App() {
 
   // placeholder flags
   const [flags, setFlags] = useState({
-    zf: 1,
+    zf: 0,
     sf: 0,
     of: 0,
     cf: 0,
     df: 0,
-    pf: 1,
+    pf: 0,
   })
 
   // Memory view (visualization grid). 48 bytes (6 rows × 8 cols) to match mockup.
@@ -159,6 +172,19 @@ export default function App() {
   const onRegisterInputChange = (reg: RegisterKey, value: string) => {
     setRegisters((prev) => ({ ...prev, [reg]: value }))
   }
+  // Check auth and role on mount
+  useEffect(() => {
+    const role = localStorage.getItem('userRole')
+    const user = localStorage.getItem('username')
+
+    if (!role) {
+      navigate('/login')
+      return
+    }
+
+    setUserRole(role)
+    setUsername(user || 'User')
+  }, [navigate])
 
   // 1. cd core   /   wasm-pack build --target web --out-dir ../frontend/src/wasm/pkg --dev --out-name web_x86_cor
   // 2. cd frontend   /   npm install   /   npm run dev
@@ -606,19 +632,38 @@ export default function App() {
       // Run up to a small instruction budget to avoid infinite loops
       const MAX_STEPS = 256
       const programEnd = LOAD_ADDR + bytes.length
+      let hitBreakpoint = false
+
       for (let i = 0; i < MAX_STEPS; i++) {
         const before = Number(emu.get_eip())
+
         // Stop once execution leaves the loaded program window
         if (before < LOAD_ADDR || before >= programEnd) break
+
+        const nextLine = i + 1
+        if (breakpoints.has(nextLine)) {
+          setCurrentLine(nextLine)
+          setPaused(true)
+          setConsoleOutput((s) => s + `Paused at breakpoint on line ${nextLine}\n`)
+          hitBreakpoint = true
+          break
+        }
+
         emu.step()
         const after = Number(emu.get_eip())
+
         // Stop if instruction execution made no forward progress
         if (after === before) break
       }
+
       const total = Number(emu.get_steps?.() ?? 0)
       setSteps(total)
+      setCurrentLine(total + 1)
+      if (!hitBreakpoint) {
+        setPaused(false)
+        setConsoleOutput((s) => s + `Run complete. Steps=${total}\n`)
+      }
       refreshRegistersFromWasm(emu)
-      setConsoleOutput((s) => s + `Run complete. Steps=${total}\n`)
     } catch (e) {
       setConsoleOutput((s) => s + `WASM runtime error: ${String(e)}\n`)
     }
@@ -636,14 +681,52 @@ export default function App() {
       const emu = new Emulator()
       wasmEmuRef.current = emu
       applyRegistersToEmu(emu, registers)
-      setConsoleOutput((s) => s + 'Created new emulator instance\n')
+
+      const { bytes, errors } = assemble(code)
+      if (errors.length) {
+        setConsoleOutput((s) => s + errors.map((e) => `ASM error: ${e}`).join('\n') + '\n')
+        return
+      }
+
+      try {
+        emu.load_program(bytes, LOAD_ADDR)
+        setConsoleOutput((s) => s + `Assembled ${bytes.length} bytes. Running...\n`)
+      } catch (e) {
+        setConsoleOutput((s) => s + `WASM load error: ${String(e)}\n`)
+        return
+      }
     }
 
     const emu = wasmEmuRef.current
     try {
-      emu.step()
-      const stepCount = Number(emu.get_steps())
+      const nextLine = steps + 1
+
+      if (breakpoints.has(nextLine)) {
+        setCurrentLine(nextLine)
+        setPaused(true)
+        setConsoleOutput((s) => s + `Paused at breakpoint on line ${nextLine}\n`)
+        return
+      }
+
+      const before = Number(emu.get_steps())
+      let stepCount = Number(emu.step())
+
+      if (stepCount === before) {
+        const { bytes, errors } = assemble(code)
+        if (errors.length) {
+          setConsoleOutput((s) => s + errors.map((e) => `ASM error: ${e}`).join('\n') + '\n')
+          return
+        }
+
+        emu.reset()
+        emu.load_program(bytes, LOAD_ADDR)
+        stepCount = Number(emu.step())
+        setConsoleOutput((s) => s + `reload step error\n`)
+      }
+
       setSteps(stepCount)
+      setCurrentLine(stepCount + 1)
+      setPaused(false)
       setConsoleOutput((s) => s + `Step ${stepCount}\n`)
       refreshRegistersFromWasm(emu)
     } catch (e) {
@@ -651,21 +734,114 @@ export default function App() {
     }
   }
 
-  function onReset() {
+  function onContinue() {
+    if (!wasmEmuRef.current) {
+      setConsoleOutput((s) => s + 'No emulator instance to continue\n')
+      return
+    }
+
     const emu = wasmEmuRef.current
-    if (emu && wasmReady) {
+
+    try {
+      setPaused(false)
+
+      emu.step() //step once to move off breakpoint
+
+      const steppedLine = Number(emu.get_steps()) + 1
+      setSteps(Number(emu.get_steps()))
+      setCurrentLine(steppedLine)
+
+      const MAX_STEPS = 256
+      let hitBreakpoint = false
+
+      for (let i = 0; i < MAX_STEPS; i++) {
+        const nextLine = Number(emu.get_steps()) + 1
+
+        if (breakpoints.has(nextLine)) {
+          setCurrentLine(nextLine)
+          setPaused(true)
+          setConsoleOutput((s) => s + `Paused at breakpoint on line ${nextLine}\n`)
+          hitBreakpoint = true
+          break
+        }
+
+        emu.step()
+      }
+
+      const stepCount = Number(emu.get_steps())
+      setSteps(stepCount)
+      setCurrentLine(stepCount + 1)
+
+      if (!hitBreakpoint) {
+        setPaused(false)
+        setConsoleOutput((s) => s + `Continue complete. Steps=${stepCount}\n`)
+      }
+
+      refreshRegistersFromWasm(emu)
+    } catch (e) {
+      setConsoleOutput((s) => s + `WASM continue error: ${String(e)}\n`)
+    }
+  }
+
+  function onReset() {
+    if (wasmEmuRef.current) {
       try {
-        emu.reset()
+        wasmEmuRef.current.reset()
         setSteps(0)
+        setPaused(false)
+        setCurrentLine(null)
+        setBreakpoints(new Set())
         setConsoleOutput('')
-        refreshRegistersFromWasm(emu)
+        refreshRegistersFromWasm(wasmEmuRef.current)
       } catch (e) {
         setConsoleOutput((s) => s + `WASM reset error: ${String(e)}\n`)
       }
-    } else {
-      setConsoleOutput((s) => s + 'WASM not ready\n')
+      wasmEmuRef.current = null
     }
+
+    setSteps(0)
+    setConsoleOutput('')
+    setRegisters({
+      eip: '0x00001000',
+      eax: '0x00000000',
+      ebx: '0x00000000',
+      ecx: '0x00000000',
+      edx: '0x00000000',
+      ebp: '0x00f00000',
+      esp: '0x00f00000',
+      esi: '0x00000000',
+      edi: '0x00000000',
+    })
+    setFlags({ zf: 0, sf: 0, of: 0, cf: 0, df: 0, pf: 0 })
+    setMemoryView(Array(48).fill(0))
   }
+
+function onOpenFileClick() {
+  fileInputRef.current?.click();
+}
+
+function onLogout() {
+  localStorage.removeItem('userRole')
+  localStorage.removeItem('username')
+  document.cookie = 'canvasAuth=; Max-Age=0; path=/'
+  navigate('/login')
+}
+
+async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    setCode(text); // loads into your Assembly Editor textarea
+    setConsoleOutput((s) => s + `Opened file: ${file.name}\n`);
+  } catch (err) {
+    console.error(err);
+    setConsoleOutput((s) => s + `Open file error: ${String(err)}\n`);
+  } finally {
+    e.target.value = ""; // allows selecting same file again
+  }
+}
 
   function refreshRegistersFromWasm(emu: EmulatorApi) {
     try {
@@ -695,11 +871,10 @@ export default function App() {
       // Try to read a small memory window starting at LOAD_ADDR if emulator exposes read_u8
       try {
         const emuUnknown = emu as unknown as { read_u8?: (addr: number) => number }
-        const readFn = emuUnknown.read_u8
-        if (typeof readFn === 'function') {
+        if (typeof emuUnknown.read_u8 === 'function') {
           const bytes: number[] = []
           for (let i = 0; i < memoryView.length; i++) {
-            const v = readFn(LOAD_ADDR + i)
+            const v = emuUnknown.read_u8(LOAD_ADDR + i)
             bytes.push(Number(v) & 0xFF)
           }
           setMemoryView(bytes)
@@ -710,26 +885,55 @@ export default function App() {
     } catch (e) {
       setConsoleOutput((s) => s + `WASM refresh error: ${String(e)}\n`)
     }
+
   }
 
+  function toggleBreakpoint(addr: number) {
+    setBreakpoints((prev) => {
+      const next = new Set(prev)
+      if (next.has(addr)) {
+        next.delete(addr)
+      } else {
+        next.add(addr)
+      }
+      return next
+    })
+  }
+  
   return (
     <div className="app-root">
       <header className="topbar">
         <div className="brand">ASU</div>
         <div className="title">Online Assembly x86 Emulator</div>
+        <div style={{ marginLeft: 'auto', paddingRight: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.9rem' }}>
+          <span>
+            {userRole === 'admin' ? 'Instructor/Admin' : 'Student'}: {username}
+          </span>
+        </div>
         <div className="toolbar">
           <button>Open</button>
           <button>Save</button>
           <button>Save as</button>
           <button onClick={onRun} className="primary">Run</button>
           <button onClick={onStep}>Step</button>
+          <button onClick={onContinue} disabled={!paused}>Continue</button>
+          <button
+            onClick={() => {
+              setBreakpoints(new Set())
+              setCurrentLine(null)
+              setPaused(false)
+            }}
+          >
+            Clear Breakpoints
+          </button>          
           <button onClick={onReset}>Reset</button>
+          <button onClick={onLogout} style={{ background: '#ff0000', color: '#ffffff' }}>Logout</button>
         </div>
       </header>
 
       <main className="main-grid">
         <section className="editor-pane">
-        <div className="editor-header">
+          <div className="editor-header">
             <span>Assembly Editor</span>
             <div className="editor-zoom-controls" role="group" aria-label="Assembly editor zoom controls">
               <button
@@ -753,14 +957,49 @@ export default function App() {
               </button>
             </div>
           </div>
-          <textarea
+          <div className='editor-wrap'>
+            <div 
+              className='gutter'
+              ref={gutterScrollRef}
+              aria-label="Breakpoint gutter"
+            >
+              {lines.map((_, idx) => {
+                const lineNo = idx + 1
+                const hasBreakpoint = breakpoints.has(lineNo)
+                return (
+                  <div
+                    key={lineNo}
+                    className={`gutter-line 
+                      ${currentLine === lineNo ? 'current-line' : ''} 
+                      ${currentLine === lineNo && breakpoints.has(lineNo) ? 'break-hit' : ''}
+                    `}
+                    onClick={() => toggleBreakpoint(lineNo)}
+                    title={hasBreakpoint ? `Remove breakpoint at line ${lineNo}` : `Add breakpoint at line ${lineNo}`}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <span className={`bp-dot ${hasBreakpoint ? 'on' : ''}`} />
+                    <span className="line-no">{lineNo}</span>
+                  </div>
+                )
+              })}
+              </div>
+              <textarea
             className="editor"
+            ref={editorScrollRef}
             value={code}
             onChange={(e) => setCode(e.target.value)}
+            onScroll={(e) => {
+              const el = e.currentTarget
+              if(gutterScrollRef.current) {
+                gutterScrollRef.current.scrollTop = el.scrollTop
+              }
+            }}
             spellCheck={false}
             aria-label="Assembly editor"
             style={{ fontSize: `${editorFontSize}px`}}
           />
+          </div>
         </section>
 
         <aside className="sidebar">
@@ -908,7 +1147,19 @@ export default function App() {
         </aside>
 
         <section className="console-pane">
-          <div className="console-header">Console</div>
+          <div className="console-header">Console
+            <button className='copy-btn' onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(consoleOutput)
+                setConsoleOutput((s) => s + 'Copied console to clipboard.\n')
+              }
+              catch {
+                //nothing
+              }
+            }} type = "button">
+              Copy
+            </button>
+          </div>
           <pre className="console-output" role="log" aria-live="polite">{consoleOutput}</pre>
         </section>
       </main>

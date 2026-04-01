@@ -199,6 +199,6 @@ mod tests {
         assert!(cpu.flags.of);  // Overflow Flag
         assert!(cpu.flags.sf);  // Sign Flag
         assert!(!cpu.flags.zf); // Not zero
-        assert!(!cpu.flags.cf); // No unsigned borrow
+        assert!(cpu.flags.cf); // Unsigned borrow: 0x7FFFFFFF < 0xFFFFFFFF
     }
 }

@@ -5,6 +5,7 @@ import './App.css'
 export default function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState('student')
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
@@ -17,12 +18,16 @@ export default function Login() {
     }
     setError('')
     if (username && password) {
-      navigate('/emulator')
+      localStorage.setItem('userRole', role)
+      localStorage.setItem('username', username)
+      navigate('/home')
     }
   }
 
   const handleSsoLogin = () => {
-    navigate('/auth')
+    localStorage.setItem('userRole', 'student')
+    localStorage.setItem('username', 'SSO User')
+    navigate('/home')
   }
 
   return (
@@ -61,6 +66,24 @@ export default function Login() {
           <div style={{ textAlign: 'center' }}>or</div>
 
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <label htmlFor="role" style={{ fontWeight: 600 }}>Role</label>
+              <select
+                id="role"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                style={{
+                  padding: '0.75rem',
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  fontSize: '1rem'
+                }}
+              >
+                <option value="student">Student</option>
+                <option value="admin">Instructor/Admin</option>
+              </select>
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <label htmlFor="username" style={{ fontWeight: 600 }}>Username</label>
               <input

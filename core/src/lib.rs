@@ -8,6 +8,7 @@ use wasm_bindgen::prelude::*;
 // Declare modules
 pub mod cpu;
 pub mod decoder;
+pub mod grader;
 pub mod instructions;
 pub mod memory;
 
@@ -188,5 +189,20 @@ impl Emulator {
         self.cpu.reset();
         self.memory = Memory::default();
         self.steps = 0;
+    }
+
+    /// Write a 32-bit value to memory (for test setup / grading)
+    pub fn write_u32(&mut self, addr: u32, val: u32) -> Result<(), String> {
+        self.memory.write_u32(addr, val).map_err(|e| e.to_string())
+    }
+
+    /// Read a 32-bit value from memory (for result checking / grading)
+    pub fn read_u32(&self, addr: u32) -> Result<u32, String> {
+        self.memory.read_u32(addr).map_err(|e| e.to_string())
+    }
+
+    /// Read a single byte from memory (used by the UI memory viewer)
+    pub fn read_u8(&self, addr: u32) -> Result<u8, String> {
+        self.memory.read_u8(addr).map_err(|e| e.to_string())
     }
 }

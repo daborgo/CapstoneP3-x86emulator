@@ -77,5 +77,53 @@ mod tests {
         assert_eq!(cpu.registers.eax, 0);
         assert!(!cpu.flags.zf);
     }
+
+    #[test]
+    fn test_register_set_get() {
+        let mut cpu = CPU::new();
+        cpu.registers.eax = 0xDEADBEEF;
+        assert_eq!(cpu.registers.eax, 0xDEADBEEF);
+        cpu.registers.ebx = 0x12345678;
+        assert_eq!(cpu.registers.ebx, 0x12345678);
+    }
+
+    #[test]
+    fn test_flag_manipulation() {
+        let mut cpu = CPU::new();
+        // Set and clear Carry Flag
+        cpu.flags.cf = true;
+        assert!(cpu.flags.cf);
+        cpu.flags.cf = false;
+        assert!(!cpu.flags.cf);
+        // Set and clear Zero Flag
+        cpu.flags.zf = true;
+        assert!(cpu.flags.zf);
+        cpu.flags.zf = false;
+        assert!(!cpu.flags.zf);
+    }
+
+    #[test]
+    fn test_register_overflow() {
+        let mut cpu = CPU::new();
+        cpu.registers.eax = u32::MAX;
+        cpu.registers.eax = cpu.registers.eax.wrapping_add(1);
+        assert_eq!(cpu.registers.eax, 0);
+    }
+
+    #[test]
+    fn test_combined_register_flag_operation() {
+        let mut cpu = CPU::new();
+        cpu.registers.eax = 1;
+        cpu.registers.ebx = 2;
+        // Simulate an ADD instruction manually
+        let result = cpu.registers.eax.wrapping_add(cpu.registers.ebx);
+        cpu.registers.eax = result;
+        // Manually update Zero and Carry flags for this test
+        cpu.flags.zf = cpu.registers.eax == 0;
+        cpu.flags.cf = (cpu.registers.eax as u64) < (1u64 + 2u64); // No carry expected
+        assert_eq!(cpu.registers.eax, 3);
+        assert!(!cpu.flags.zf);
+        assert!(!cpu.flags.cf);
+    }
 }
 

@@ -1,12 +1,8 @@
-//! OR Instruction Implementation
-//!
-//! Implements bitwise OR for register destinations.
-
 use std::fmt;
 
 use crate::cpu::CPU;
-use crate::decoder::{Instruction, Operand};
 use crate::memory::Memory;
+use crate::decoder::{Instruction, Operand};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecutionError {
@@ -17,8 +13,8 @@ pub enum ExecutionError {
 impl fmt::Display for ExecutionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExecutionError::InvalidOperand => write!(f, "Invalid operand for OR instruction"),
-            ExecutionError::MemoryError(err) => write!(f, "Memory error: {}", err),
+            ExecutionError::InvalidOperand => write!(f, "Invalid operand for OR"),
+            ExecutionError::MemoryError(e) => write!(f, "Memory error: {}", e),
         }
     }
 }
