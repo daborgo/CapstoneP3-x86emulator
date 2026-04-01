@@ -57,7 +57,7 @@ export default function App() {
   const editorScrollRef = useRef<HTMLTextAreaElement | null>(null)
   const gutterScrollRef = useRef<HTMLDivElement | null>(null)
   const lines = code.split('\n')
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  // const fileInputRef = useRef<HTMLInputElement | null>(null)
   const navigate = useNavigate()
   const [editorZoom, setEditorZoom] = useState(100)
 
