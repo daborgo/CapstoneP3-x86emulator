@@ -25,6 +25,11 @@ const DEFAULT_REGISTERS: RegistersState = {
 }
 
 const LOAD_ADDR = 0x00001000
+const MAX_ATTEMPTS = 3
+
+function attemptKey(labNum: number) {
+  return `lab_attempts_${labNum}`
+}
 
 function PencilButton({
   onClick,
@@ -535,6 +540,11 @@ export default function LabPage() {
   const labNum = parseInt(location.pathname.replace('/lab', '')) || 1
   const [labConfig, setLabConfig] = useState(() => getLabContent(labNum))
 
+  // Attempt lockout feature
+  const [attemptsUsed, setAttemptsUsed] = useState(0)
+  const [lockedOut, setLockedOut] = useState(false)
+
+
   const [code, setCode] = useState(labConfig.starterCode)
   const [consoleOutput, setConsoleOutput] = useState('')
   const [steps, setSteps] = useState(0)
@@ -712,6 +722,12 @@ export default function LabPage() {
     window.addEventListener('storage', onStorageUpdate)
     return () => window.removeEventListener('storage', onStorageUpdate)
   }, [labNum, editingDescription, editingStarterCode, editingTitle])
+
+  useEffect(() => {
+  localStorage.removeItem(`lab_attempts_${labNum}`)
+  setAttemptsUsed(0)
+  setLockedOut(false)
+  }, [labNum])
 
   // Load WASM once on mount
   useEffect(() => {
@@ -1055,6 +1071,21 @@ export default function LabPage() {
 
   function buildGradingResult(): GradingResult | null {
     if (!wasmModRef.current) return null
+
+
+    const used = Number(localStorage.getItem(attemptKey(labNum)) ?? '0')
+    if (used >= MAX_ATTEMPTS) {
+    return {
+      earned: 0,
+      total: 0,
+      autoMax: 0,
+      details: [`Locked out: you already used all ${MAX_ATTEMPTS} submission attempts for this lab.`],
+    }
+  }
+    const nextUsed = used + 1
+    localStorage.setItem(attemptKey(labNum), String(nextUsed))
+    setAttemptsUsed(nextUsed)
+    setLockedOut(nextUsed >= MAX_ATTEMPTS)
 
     const { bytes, errors } = assemble(code)
     if (errors.length) {
@@ -1407,11 +1438,16 @@ export default function LabPage() {
               </div>
             )}
           </div>
+          <div style={{ marginTop: 12, fontSize: '0.9rem' }}>
+          Attempts: {attemptsUsed} / {MAX_ATTEMPTS}
+          {lockedOut && <div style={{ color: '#c0392b', marginTop: 4 }}>All attempts used</div>}
+        </div>
 
           <GradingPanel
             labId={labNum}
             description=""
             onSubmit={handleStudentSubmit}
+            lockedOut={lockedOut}
           />
         </aside>
 
