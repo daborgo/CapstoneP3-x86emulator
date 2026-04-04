@@ -11,17 +11,20 @@ export interface GradingPanelProps {
   labId: number
   description: string
   onSubmit: () => GradingResult | null
+  lockedOut?: boolean
 }
 
 export default function GradingPanel({
   labId,
   description,
   onSubmit,
+  lockedOut = false,
 }: GradingPanelProps) {
   const [result, setResult] = useState<GradingResult | null>(null)
   const [submitted, setSubmitted] = useState(false)
 
   function handleSubmit() {
+    if (lockedOut) return
     const r = onSubmit()
     setResult(r)
     setSubmitted(true)
@@ -34,8 +37,8 @@ export default function GradingPanel({
       </div>
       {description && <p className="grading-desc">{description}</p>}
 
-      <button className="submit-btn" onClick={handleSubmit}>
-        Submit for Grading
+      <button className="submit-btn" onClick={handleSubmit} disabled={lockedOut}>
+      {lockedOut ? 'Submit for Grading' : 'Submit for Grading'}
       </button>
 
       {submitted && result && (
